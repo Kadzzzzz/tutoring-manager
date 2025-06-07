@@ -1,0 +1,54 @@
+{
+  "name": "jeremy-admin",
+  "version": "1.0.0",
+  "description": "Application Electron pour administrer les ressources pédagogiques",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never",
+    "clean": "rm -rf dist node_modules",
+    "reinstall": "npm run clean && npm install"
+  },
+  "keywords": [
+    "electron",
+    "vue",
+    "education",
+    "admin"
+  ],
+  "author": "Jeremy Luccioni",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.27.5",
+    "@babel/parser": "^7.27.5",
+    "@babel/traverse": "^7.27.4",
+    "@babel/types": "^7.27.6",
+    "fs-extra": "^11.1.1",
+    "prettier": "^3.0.3",
+    "vue": "^3.3.4"
+  },
+  "build": {
+    "appId": "com.jeremy.admin",
+    "productName": "Jeremy Admin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "category": "Education"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeremy/jeremy-admin.git"
+  }
+}

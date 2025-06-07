@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeremy Admin - Gestion des Ressources</title>
+
+  <!-- Vue.js 3 depuis CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+
+  <!-- Font Awesome pour les icônes -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Styles personnalisés -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header de l'application -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="logo">
+          <i class="fas fa-graduation-cap"></i>
+          <h1>Jeremy Admin</h1>
+        </div>
+
+        <div class="project-status" v-if="projectInfo">
+          <div class="status-item" :class="{ 'status-success': projectInfo.appVueExists, 'status-error': !projectInfo.appVueExists }">
+            <i :class="projectInfo.appVueExists ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
+            <span>App.vue</span>
+          </div>
+          <div class="status-item" :class="{ 'status-success': projectInfo.translationsExists, 'status-error': !projectInfo.translationsExists }">
+            <i :class="projectInfo.translationsExists ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
+            <span>Traductions</span>
+          </div>
+          <div class="status-item" :class="{ 'status-success': projectInfo.documentsExists, 'status-error': !projectInfo.documentsExists }">
+            <i :class="projectInfo.documentsExists ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
+            <span>Documents</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button @click="refreshData" class="btn btn-secondary" :disabled="loading">
+            <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+            Actualiser
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation principale -->
+    <nav class="main-nav">
+      <div class="nav-content">
+        <button
+          @click="currentView = 'list'"
+          class="nav-btn"
+          :class="{ active: currentView === 'list' }"
+        >
+          <i class="fas fa-list"></i>
+          Liste des ressources
+        </button>
+        <button
+          @click="currentView = 'add'"
+          class="nav-btn"
+          :class="{ active: currentView === 'add' }"
+        >
+          <i class="fas fa-plus"></i>
+          Ajouter une ressource
+        </button>
+        <button
+          @click="currentView = 'stats'"
+          class="nav-btn"
+          :class="{ active: currentView === 'stats' }"
+        >
+          <i class="fas fa-chart-bar"></i>
+          Statistiques
+        </button>
+      </div>
+    </nav>
+
+    <!-- Messages de notification -->
+    <div v-if="notification" class="notification" :class="notification.type">
+      <div class="notification-content">
+        <i :class="notification.icon"></i>
+        <span>{{ notification.message }}</span>
+        <button @click="notification = null" class="notification-close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Contenu principal -->
+    <main class="main-content">
+
+      <!-- Vue: Liste des ressources -->
+      <div v-if="currentView === 'list'" class="view-container">
+        <div class="view-header">
+          <h2><i class="fas fa-list"></i> Liste des ressources</h2>
+          <div class="view-actions">
+            <div class="search-box">
+              <i class="fas fa-search"></i>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Rechercher par titre, ID ou matière..."
+              >
+            </div>
+            <select v-model="filterSubject" class="filter-select">
+              <option value="">Toutes les matières</option>
+              <option value="maths">Mathématiques</option>
+              <option value="physics">Physique</option>
+              <option value="chemistry">Chimie</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="loading" class="loading-state">
+          <i class="fas fa-spinner fa-spin"></i>
+          <p>Chargement des ressources...</p>
+        </div>
+
+        <div v-else-if="filteredResources.length === 0" class="empty-state">
+          <i class="fas fa-inbox"></i>
+          <h3>Aucune ressource trouvée</h3>
+          <p>{{ resources.length === 0 ? 'Commencez par ajouter votre première ressource !' : 'Aucune ressource ne correspond à vos critères de recherche.' }}</p>
+          <button v-if="resources.length === 0" @click="currentView = 'add'" class="btn btn-primary">
+            <i class="fas fa-plus"></i>
+            Ajouter une ressource
+          </button>
+        </div>
+
+        <div v-else class="resources-grid">
+          <div
+            v-for="resource in filteredResources"
+            :key="resource.id"
+            class="resource-card"
+          >
+            <div class="resource-header">
+              <div class="resource-tags">
+                <span class="tag tag-subject" :data-subject="resource.subject">
+                  {{ getSubjectName(resource.subject) }}
+                </span>
+                <span class="tag tag-level">{{ getLevelName(resource.levelKey) }}</span>
+                <span class="tag tag-type">{{ getTypeName(resource.typeKey) }}</span>
+              </div>
+              <div class="resource-actions">
+                <button @click="editResource(resource)" class="btn-icon btn-edit" title="Modifier">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button @click="deleteResourceConfirm(resource)" class="btn-icon btn-delete" title="Supprimer">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="resource-content">
+              <h3 class="resource-title">{{ getResourceTitle(resource) }}</h3>
+              <p class="resource-description">{{ getResourceDescription(resource) }}</p>
+
+              <div class="resource-meta">
+                <div class="meta-item">
+                  <i class="fas fa-clock"></i>
+                  <span>{{ resource.duration }}</span>
+                </div>
+                <div v-if="resource.hasVideo" class="meta-item">
+                  <i class="fas fa-video"></i>
+                  <span>Vidéo</span>
+                </div>
+                <div v-if="resource.pdfStatement || resource.pdfSolution" class="meta-item">
+                  <i class="fas fa-file-pdf"></i>
+                  <span>PDF</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="resource-id">ID: {{ resource.id }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vue: Formulaire d'ajout/modification -->
+      <div v-if="currentView === 'add' || currentView === 'edit'" class="view-container">
+        <div class="view-header">
+          <h2>
+            <i :class="currentView === 'add' ? 'fas fa-plus' : 'fas fa-edit'"></i>
+            {{ currentView === 'add' ? 'Ajouter une ressource' : 'Modifier une ressource' }}
+          </h2>
+          <div class="view-actions">
+            <button @click="cancelEdit" class="btn btn-secondary">
+              <i class="fas fa-times"></i>
+              Annuler
+            </button>
+          </div>
+        </div>
+
+        <!-- Composant formulaire -->
+        <resource-form
+          :resource="editingResource"
+          :is-editing="currentView === 'edit'"
+          @save="handleSaveResource"
+          @cancel="cancelEdit"
+        ></resource-form>
+      </div>
+
+      <!-- Vue: Statistiques -->
+      <div v-if="currentView === 'stats'" class="view-container">
+        <div class="view-header">
+          <h2><i class="fas fa-chart-bar"></i> Statistiques</h2>
+        </div>
+
+        <div v-if="stats" class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-number">{{ stats.total }}</div>
+            <div class="stat-label">Ressources totales</div>
+            <i class="fas fa-book stat-icon"></i>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-number">{{ stats.withVideo }}</div>
+            <div class="stat-label">Avec vidéo</div>
+            <i class="fas fa-video stat-icon"></i>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-number">{{ stats.withPdfs }}</div>
+            <div class="stat-label">Avec PDF</div>
+            <i class="fas fa-file-pdf stat-icon"></i>
+          </div>
+        </div>
+
+        <div class="stats-details">
+          <div class="stats-section">
+            <h3>Par matière</h3>
+            <div class="stats-bars">
+              <div v-for="(count, subject) in stats.bySubject" :key="subject" class="stat-bar">
+                <span class="stat-bar-label">{{ getSubjectName(subject) }}</span>
+                <div class="stat-bar-track">
+                  <div class="stat-bar-fill" :style="{ width: (count / stats.total * 100) + '%' }"></div>
+                </div>
+                <span class="stat-bar-value">{{ count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <h3>Par niveau</h3>
+            <div class="stats-bars">
+              <div v-for="(count, level) in stats.byLevel" :key="level" class="stat-bar">
+                <span class="stat-bar-label">{{ getLevelName(level) }}</span>
+                <div class="stat-bar-track">
+                  <div class="stat-bar-fill" :style="{ width: (count / stats.total * 100) + '%' }"></div>
+                </div>
+                <span class="stat-bar-value">{{ count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <h3>Par type</h3>
+            <div class="stats-bars">
+              <div v-for="(count, type) in stats.byType" :key="type" class="stat-bar">
+                <span class="stat-bar-label">{{ getTypeName(type) }}</span>
+                <div class="stat-bar-track">
+                  <div class="stat-bar-fill" :style="{ width: (count / stats.total * 100) + '%' }"></div>
+                </div>
+                <span class="stat-bar-value">{{ count }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Modal de confirmation de suppression -->
+    <div v-if="deleteConfirm" class="modal-overlay" @click="deleteConfirm = null">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <h3><i class="fas fa-exclamation-triangle"></i> Confirmer la suppression</h3>
+        </div>
+        <div class="modal-content">
+          <p>Êtes-vous sûr de vouloir supprimer la ressource <strong>{{ deleteConfirm.id }}</strong> ?</p>
+          <p class="warning-text">Cette action est irréversible et supprimera également les fichiers PDF associés.</p>
+        </div>
+        <div class="modal-actions">
+          <button @click="deleteConfirm = null" class="btn btn-secondary">Annuler</button>
+          <button @click="confirmDelete" class="btn btn-danger">
+            <i class="fas fa-trash"></i>
+            Supprimer
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="components/ResourceForm.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
