@@ -99,6 +99,51 @@ function setupIpcHandlers() {
     }
   })
 
+  // === GESTION DES TRADUCTIONS (SIMPLE) ===
+
+  /**
+   * Récupère les traductions d'une ressource existante
+   */
+  ipcMain.handle('get-resource-translations', async (event, { subject, resourceId }) => {
+    try {
+      console.log(`🔍 [MAIN] Récupération traductions pour ${subject}/${resourceId}`)
+
+      // Lire le fichier translations.js (comme pour load-resources)
+      const translationsContent = await fileService.readTranslations()
+      const allTranslations = resourceParser.extractTranslationsFromFile(translationsContent)
+
+      // Extraire les traductions pour cette ressource spécifique
+      const resourceTranslations = {
+        fr: {},
+        en: {}
+      }
+
+      // Traductions françaises
+      if (allTranslations.fr?.resources?.exercises?.[subject]?.[resourceId]) {
+        resourceTranslations.fr = allTranslations.fr.resources.exercises[subject][resourceId]
+      }
+
+      // Traductions anglaises
+      if (allTranslations.en?.resources?.exercises?.[subject]?.[resourceId]) {
+        resourceTranslations.en = allTranslations.en.resources.exercises[subject][resourceId]
+      }
+
+      console.log(`✅ [MAIN] Traductions trouvées:`, resourceTranslations)
+
+      return {
+        success: true,
+        data: resourceTranslations
+      }
+
+    } catch (error) {
+      console.error('❌ [MAIN] Erreur récupération traductions:', error.message)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  })
+
   // Ajouter une nouvelle ressource
   ipcMain.handle('add-resource', async (event, { resource, frTranslations, enTranslations, pdfFiles }) => {
     try {

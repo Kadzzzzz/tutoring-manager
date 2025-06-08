@@ -1,0 +1,379 @@
+// direct-translation-service.js - Version CORRIGÉE pour structure JSON valide
+const fs = require('fs-extra')
+const path = require('path')
+
+class DirectTranslationService {
+  constructor(customPath = null) {
+    if (customPath) {
+      this.translationsPath = customPath
+    } else {
+      const parentDir = path.join(require('os').homedir(), 'Documents')
+      this.translationsPath = path.join(parentDir, 'tutoring-website', 'src', 'i18n', 'translations.js')
+    }
+  }
+
+  setTranslationsPath(newPath) {
+    this.translationsPath = newPath
+    console.log('📁 Nouveau chemin traductions:', this.translationsPath)
+  }
+
+  /**
+   * LECTURE AMÉLIORÉE avec validation de structure
+   */
+  async getResourceTranslations(subject, resourceId) {
+    try {
+      console.log(`🔍 Recherche traductions pour ${subject}/${resourceId}`)
+
+      if (!await fs.pathExists(this.translationsPath)) {
+        throw new Error(`Fichier translations.js introuvable: ${this.translationsPath}`)
+      }
+
+      // Lire et parser le fichier pour validation
+      const content = await fs.readFile(this.translationsPath, 'utf8')
+
+      // Essayer de valider la structure JS
+      try {
+        await this.validateTranslationStructure(content)
+      } catch (error) {
+        console.warn('⚠️ Structure potentiellement corrompue:', error.message)
+        // Tenter une réparation automatique
+        await this.repairTranslationFile()
+      }
+
+      // Pattern pour extraire les traductions
+      const pattern = new RegExp(
+        `${resourceId}:\\s*{\\s*` +
+        `title:\\s*"([^"]*)",?\\s*` +
+        `description:\\s*"([^"]*)",?\\s*` +
+        `fullDescription:\\s*"([^"]*)",?\\s*` +
+        `notes:\\s*"([^"]*)"\\s*` +
+        `}`,
+        'gs'
+      )
+
+      const matches = [...content.matchAll(pattern)]
+      console.log(`📊 Trouvé ${matches.length} occurrences de ${resourceId}`)
+
+      const cleanValue = (str) => {
+        if (!str || str === 'undefined') return ''
+        return str.replace(/\\"/g, '"').replace(/\\n/g, '\n').trim()
+      }
+
+      const result = {
+        fr: {
+          title: matches[0] ? cleanValue(matches[0][1]) : '',
+          description: matches[0] ? cleanValue(matches[0][2]) : '',
+          fullDescription: matches[0] ? cleanValue(matches[0][3]) : '',
+          notes: matches[0] ? cleanValue(matches[0][4]) : ''
+        },
+        en: {
+          title: matches[1] ? cleanValue(matches[1][1]) : '',
+          description: matches[1] ? cleanValue(matches[1][2]) : '',
+          fullDescription: matches[1] ? cleanValue(matches[1][3]) : '',
+          notes: matches[1] ? cleanValue(matches[1][4]) : ''
+        }
+      }
+
+      return result
+    } catch (error) {
+      console.error('❌ Erreur lecture:', error.message)
+      throw error
+    }
+  }
+
+  /**
+   * ÉCRITURE ULTRA SÉCURISÉE avec validation
+   */
+  async saveResourceTranslations(subject, resourceId, frTranslations, enTranslations) {
+    try {
+      console.log(`💾 Sauvegarde traductions pour ${subject}/${resourceId}`)
+
+      if (!await fs.pathExists(this.translationsPath)) {
+        throw new Error(`Fichier translations.js introuvable: ${this.translationsPath}`)
+      }
+
+      // Créer une sauvegarde
+      const backupPath = this.translationsPath + '.backup.' + Date.now()
+      await fs.copy(this.translationsPath, backupPath)
+      console.log(`💾 Sauvegarde créée: ${backupPath}`)
+
+      let content = await fs.readFile(this.translationsPath, 'utf8')
+
+      // Valider la structure avant modification
+      try {
+        await this.validateTranslationStructure(content)
+      } catch (error) {
+        console.warn('⚠️ Structure corrompue détectée, réparation...')
+        content = await this.repairTranslationContent(content)
+      }
+
+      // Nettoyer les valeurs
+      const clean = (str) => {
+        if (!str) return ''
+        return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').trim()
+      }
+
+      // 1. Supprimer les anciennes occurrences de manière SÉCURISÉE
+      content = this.removeResourceSafely(content, resourceId)
+
+      // 2. Créer les nouvelles entrées
+      const frEntry = `          ${resourceId}: {
+            title: "${clean(frTranslations.title)}",
+            description: "${clean(frTranslations.description)}",
+            fullDescription: "${clean(frTranslations.fullDescription)}",
+            notes: "${clean(frTranslations.notes)}"
+          }`
+
+      const enEntry = `          ${resourceId}: {
+            title: "${clean(enTranslations.title)}",
+            description: "${clean(enTranslations.description)}",
+            fullDescription: "${clean(enTranslations.fullDescription)}",
+            notes: "${clean(enTranslations.notes)}"
+          }`
+
+      // 3. Ajouter les entrées de manière SÉCURISÉE
+      content = this.insertResourceSafely(content, subject, frEntry, enEntry)
+
+      // 4. Valider le résultat final
+      try {
+        await this.validateTranslationStructure(content)
+        console.log('✅ Structure validée après modification')
+      } catch (error) {
+        console.error('❌ Structure corrompue après modification:', error.message)
+        throw new Error('Impossible de maintenir une structure valide')
+      }
+
+      // 5. Sauvegarder
+      await fs.writeFile(this.translationsPath, content, 'utf8')
+      console.log('✅ Fichier sauvegardé avec succès')
+
+      // Supprimer la sauvegarde si tout s'est bien passé
+      await fs.remove(backupPath)
+
+      return true
+
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde:', error.message)
+      throw error
+    }
+  }
+
+  /**
+   * Supprime une ressource de manière sécurisée
+   */
+  removeResourceSafely(content, resourceId) {
+    // Pattern plus sélectif pour éviter de casser la structure
+    const removePattern = new RegExp(
+      `(\\s*,\\s*)?${resourceId}:\\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}(\\s*,)?`,
+      'g'
+    )
+
+    return content.replace(removePattern, (match, beforeComma, afterComma) => {
+      // Gérer intelligemment les virgules
+      if (beforeComma && afterComma) {
+        return ',' // Garder une virgule si l'élément est au milieu
+      } else if (beforeComma || afterComma) {
+        return '' // Supprimer la virgule si l'élément est au début ou à la fin
+      }
+      return ''
+    })
+  }
+
+  /**
+   * Insère une ressource de manière sécurisée
+   */
+  insertResourceSafely(content, subject, frEntry, enEntry) {
+    // Pattern pour trouver la fin de la section subject dans chaque langue
+    const sectionPattern = new RegExp(
+      `(${subject}:\\s*{)([^}]*(?:{[^{}]*}[^{}]*)*)(\\s*})`,
+      'g'
+    )
+
+    let sectionCount = 0
+
+    return content.replace(sectionPattern, (match, before, existing, after) => {
+      sectionCount++
+
+      const trimmedExisting = existing.trim()
+      const needsComma = trimmedExisting && !trimmedExisting.endsWith(',')
+
+      if (sectionCount === 1) {
+        // Section française
+        const newContent = needsComma ? existing + ',\n' + frEntry : existing + '\n' + frEntry
+        return before + newContent + after
+      } else if (sectionCount === 2) {
+        // Section anglaise
+        const newContent = needsComma ? existing + ',\n' + enEntry : existing + '\n' + enEntry
+        return before + newContent + after
+      }
+
+      return match
+    })
+  }
+
+  /**
+   * Valide la structure du fichier translations
+   */
+  async validateTranslationStructure(content) {
+    try {
+      // Tenter d'évaluer la structure JS de base
+      const testContent = content
+        .replace(/export\s+const\s+translations\s*=\s*/, 'const translations = ')
+        .replace(/^\s*\/\/.*$/gm, '') // Supprimer les commentaires
+
+      // Test simple de validation des accolades
+      const openBraces = (testContent.match(/{/g) || []).length
+      const closeBraces = (testContent.match(/}/g) || []).length
+
+      if (openBraces !== closeBraces) {
+        throw new Error(`Accolades non équilibrées: ${openBraces} ouvertures, ${closeBraces} fermetures`)
+      }
+
+      console.log('✅ Structure de base validée')
+      return true
+    } catch (error) {
+      throw new Error(`Structure invalide: ${error.message}`)
+    }
+  }
+
+  /**
+   * Répare automatiquement le fichier de traductions
+   */
+  async repairTranslationFile() {
+    console.log('🔧 Tentative de réparation automatique...')
+
+    try {
+      let content = await fs.readFile(this.translationsPath, 'utf8')
+      content = this.repairTranslationContent(content)
+
+      // Créer une sauvegarde avant réparation
+      const repairBackup = this.translationsPath + '.before-repair.' + Date.now()
+      await fs.copy(this.translationsPath, repairBackup)
+
+      await fs.writeFile(this.translationsPath, content, 'utf8')
+      console.log('✅ Fichier réparé automatiquement')
+
+      return true
+    } catch (error) {
+      console.error('❌ Impossible de réparer automatiquement:', error.message)
+      throw error
+    }
+  }
+
+  /**
+   * Répare le contenu du fichier
+   */
+  repairTranslationContent(content) {
+    // Réparations de base
+    content = content
+      // Supprimer les virgules multiples
+      .replace(/,(\s*,)+/g, ',')
+      // Supprimer les virgules avant les accolades fermantes
+      .replace(/,(\s*})/g, '$1')
+      // Supprimer les virgules après les accolades ouvrantes
+      .replace(/{\s*,/g, '{')
+      // Nettoyer les espaces multiples
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      // Corriger les "undefined" en chaînes vides
+      .replace(/"undefined"/g, '""')
+
+    return content
+  }
+
+  /**
+   * Supprime les traductions d'une ressource
+   */
+  async removeResourceTranslations(subject, resourceId) {
+    try {
+      console.log(`🗑️ Suppression traductions pour ${subject}/${resourceId}`)
+
+      let content = await fs.readFile(this.translationsPath, 'utf8')
+      content = this.removeResourceSafely(content, resourceId)
+      content = this.repairTranslationContent(content)
+
+      await fs.writeFile(this.translationsPath, content, 'utf8')
+      console.log('✅ Traductions supprimées')
+
+      return true
+    } catch (error) {
+      console.error('❌ Erreur suppression:', error.message)
+      throw error
+    }
+  }
+
+  /**
+   * Test complet du service avec validation
+   */
+  async test() {
+    console.log('🧪 Test service de traductions sécurisé...')
+    console.log('📁 Chemin:', this.translationsPath)
+
+    try {
+      const exists = await fs.pathExists(this.translationsPath)
+      console.log('📄 Fichier existe:', exists)
+
+      if (!exists) {
+        console.error('❌ Fichier translations.js introuvable')
+        return false
+      }
+
+      // Test de validation de structure
+      console.log('\n🔍 Validation de la structure...')
+      const content = await fs.readFile(this.translationsPath, 'utf8')
+
+      try {
+        await this.validateTranslationStructure(content)
+        console.log('✅ Structure valide')
+      } catch (error) {
+        console.warn('⚠️ Structure invalide:', error.message)
+        console.log('🔧 Tentative de réparation...')
+        await this.repairTranslationFile()
+      }
+
+      // Test de lecture
+      console.log('\n1️⃣ Test lecture existante...')
+      const existing = await this.getResourceTranslations('physics', 'test')
+      console.log('   FR:', existing.fr.title)
+      console.log('   EN:', existing.en.title)
+
+      // Test d'ajout
+      console.log('\n2️⃣ Test d\'ajout sécurisé...')
+      const success = await this.saveResourceTranslations('maths', 'testSecurise',
+        { title: 'Test Sécurisé FR', description: 'Description FR', fullDescription: 'Complet FR', notes: 'Notes FR' },
+        { title: 'Test Secure EN', description: 'Description EN', fullDescription: 'Complete EN', notes: 'Notes EN' }
+      )
+
+      if (success) {
+        const added = await this.getResourceTranslations('maths', 'testSecurise')
+        console.log('   Ajouté FR:', added.fr.title)
+        console.log('   Ajouté EN:', added.en.title)
+
+        // Validation finale
+        const finalContent = await fs.readFile(this.translationsPath, 'utf8')
+        await this.validateTranslationStructure(finalContent)
+        console.log('✅ Structure finale validée')
+
+        return true
+      }
+
+      return false
+
+    } catch (error) {
+      console.error('❌ Test échoué:', error.message)
+      return false
+    }
+  }
+}
+
+module.exports = DirectTranslationService
+
+if (require.main === module) {
+  const service = new DirectTranslationService()
+  service.test().then(result => {
+    console.log('\n🎯 Résultat du test:', result ? '✅ SUCCÈS' : '❌ ÉCHEC')
+    process.exit(result ? 0 : 1)
+  }).catch(error => {
+    console.error('💥 Erreur critique:', error)
+    process.exit(1)
+  })
+}

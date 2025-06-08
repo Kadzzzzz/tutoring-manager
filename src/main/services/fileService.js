@@ -10,7 +10,7 @@ const os = require('os')
 class FileService {
   constructor() {
     // Chemin vers le projet web Jeremy Tutoring
-    this.webProjectPath = path.join(os.homedir(), 'Documents', 'jeremy-tutoring')
+    this.webProjectPath = path.join(os.homedir(), 'Documents', 'tutoring-website')
     this.appVuePath = path.join(this.webProjectPath, 'src', 'App.vue')
     this.translationsPath = path.join(this.webProjectPath, 'src', 'i18n', 'translations.js')
     this.documentsPath = path.join(this.webProjectPath, 'public', 'documents', 'exercices')

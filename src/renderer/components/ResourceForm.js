@@ -34,7 +34,7 @@ window.ResourceForm = {
                 :class="{ 'error': errors.id }"
                 placeholder="ex: interro0LLG"
                 required
-                @blur="validateId"
+                @blur="validateIdField"
               >
               <span v-if="errors.id" class="error-message">{{ errors.id }}</span>
               <span v-else class="help-text">Utilisez uniquement lettres, chiffres et tirets</span>
@@ -348,6 +348,7 @@ window.ResourceForm = {
     // === ÉTAT RÉACTIF ===
     const saving = ref(false)
     const errors = reactive({})
+    const existingResources = ref([])
 
     // Données du formulaire
     const formData = reactive({
@@ -399,10 +400,76 @@ window.ResourceForm = {
 
     // === MÉTHODES ===
 
-    // Initialiser le formulaire
-    const initializeForm = () => {
+    /**
+     * Valide et nettoie un ID de ressource
+     * @param {string} id - L'ID à valider
+     * @returns {string} - L'ID nettoyé
+     */
+    const validateId = (id) => {
+      if (!id || typeof id !== 'string') {
+        return ''
+      }
+
+      // Nettoyer l'ID : uniquement lettres, chiffres et tirets
+      return id
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/^-+|-+$/g, '') // Supprimer les tirets en début/fin
+        .substring(0, 50) // Limite à 50 caractères
+    }
+
+    /**
+     * Valide le champ ID
+     */
+    const validateIdField = () => {
+      if (formData.id) {
+        formData.id = validateId(formData.id)
+      }
+    }
+
+    /**
+     * Génère automatiquement un ID basé sur le titre français
+     */
+    const generateId = () => {
+      const title = frTranslations.title || ''
+      if (!title) {
+        console.warn('⚠️ Impossible de générer un ID : titre français manquant')
+        return
+      }
+
+      let baseId = title
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Supprimer les accents
+        .replace(/[^a-z0-9]+/g, '') // Garder uniquement lettres et chiffres
+        .substring(0, 20) // Limiter à 20 caractères
+
+      if (!baseId) {
+        baseId = 'resource'
+      }
+
+      // Vérifier l'unicité
+      let uniqueId = baseId
+      let counter = 1
+
+      while (existingResources.value.some(r => r.id === uniqueId)) {
+        uniqueId = `${baseId}${counter}`
+        counter++
+      }
+
+      formData.id = validateId(uniqueId)
+      console.log('🆔 ID généré:', formData.id)
+    }
+
+    /**
+     * Initialise le formulaire en mode édition ou création
+     */
+    const initializeForm = async () => {
       if (props.resource) {
-        // Mode édition - remplir avec les données existantes
+        console.log('🔧 Mode édition - Initialisation du formulaire')
+        console.log('📋 Ressource reçue:', props.resource)
+
+        // Mode édition - remplir avec les données de base
         Object.assign(formData, {
           id: props.resource.id || '',
           subject: props.resource.subject || '',
@@ -415,39 +482,108 @@ window.ResourceForm = {
           pdfSolution: props.resource.pdfSolution || ''
         })
 
-        // TODO: Charger les traductions existantes depuis l'app parent
-        console.log('Mode édition pour:', props.resource.id)
+        console.log('✅ Données de base appliquées:', { ...formData })
+
+        // 🔧 NOUVELLE LOGIQUE: Charger les traductions via l'API
+        try {
+          console.log('📖 Chargement des traductions depuis l\'API...')
+
+          const translationsResult = await window.electronAPI.getResourceTranslations({
+            subject: props.resource.subject,
+            resourceId: props.resource.id
+          })
+
+          if (translationsResult.success && translationsResult.data) {
+            console.log('✅ Traductions chargées:', translationsResult.data)
+
+            // Appliquer les traductions françaises
+            if (translationsResult.data.fr) {
+              console.log('🇫🇷 Application des traductions FR:', translationsResult.data.fr)
+              Object.assign(frTranslations, {
+                title: translationsResult.data.fr.title || '',
+                description: translationsResult.data.fr.description || '',
+                fullDescription: translationsResult.data.fr.fullDescription || '',
+                notes: translationsResult.data.fr.notes || ''
+              })
+              console.log('✅ Traductions FR appliquées:', { ...frTranslations })
+            }
+
+            // Appliquer les traductions anglaises
+            if (translationsResult.data.en) {
+              console.log('🇬🇧 Application des traductions EN:', translationsResult.data.en)
+              Object.assign(enTranslations, {
+                title: translationsResult.data.en.title || '',
+                description: translationsResult.data.en.description || '',
+                fullDescription: translationsResult.data.en.fullDescription || '',
+                notes: translationsResult.data.en.notes || ''
+              })
+              console.log('✅ Traductions EN appliquées:', { ...enTranslations })
+            }
+
+            // 🔧 Force la réactivité avec nextTick
+            await Vue.nextTick()
+            console.log('🎯 Formulaire prêt avec traductions')
+
+          } else {
+            console.warn('⚠️ Aucune traduction trouvée ou erreur:', translationsResult.error)
+
+            // Initialiser avec des valeurs vides
+            Object.assign(frTranslations, {
+              title: '',
+              description: '',
+              fullDescription: '',
+              notes: ''
+            })
+
+            Object.assign(enTranslations, {
+              title: '',
+              description: '',
+              fullDescription: '',
+              notes: ''
+            })
+          }
+
+        } catch (error) {
+          console.error('❌ Erreur lors du chargement des traductions:', error)
+
+          // En cas d'erreur, initialiser avec des valeurs vides
+          Object.assign(frTranslations, {
+            title: '',
+            description: '',
+            fullDescription: '',
+            notes: ''
+          })
+
+          Object.assign(enTranslations, {
+            title: '',
+            description: '',
+            fullDescription: '',
+            notes: ''
+          })
+        }
+
+        console.log('🎯 Initialisation terminée - Mode édition pour:', props.resource.id)
+
       } else {
         // Mode création - formulaire vide
-        console.log('Mode création - nouveau formulaire')
-      }
-    }
+        console.log('➕ Mode création - nouveau formulaire')
 
-    // Valider l'ID
-    const validateId = async () => {
-      const id = formData.id.trim()
-      delete errors.id
-
-      if (!id) {
-        errors.id = 'L\'ID est requis'
-        return
-      }
-
-      if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-        errors.id = 'L\'ID ne peut contenir que des lettres, chiffres, tirets et underscores'
-        return
-      }
-
-      // Vérifier l'unicité uniquement si c'est un nouvel ID
-      if (!props.isEditing || id !== props.resource?.id) {
-        try {
-          const result = await window.electronAPI.generateUniqueId(id, [])
-          if (result.success && result.data !== id) {
-            errors.id = `Un ID similaire existe déjà. Suggestion: ${result.data}`
+        // Réinitialiser tous les champs
+        Object.keys(formData).forEach(key => {
+          if (key === 'hasVideo') {
+            formData[key] = false
+          } else {
+            formData[key] = ''
           }
-        } catch (error) {
-          console.error('Erreur validation ID:', error)
-        }
+        })
+
+        Object.keys(frTranslations).forEach(key => {
+          frTranslations[key] = ''
+        })
+
+        Object.keys(enTranslations).forEach(key => {
+          enTranslations[key] = ''
+        })
       }
     }
 
@@ -561,9 +697,24 @@ window.ResourceForm = {
     })
 
     // === CYCLE DE VIE ===
-    onMounted(() => {
-      initializeForm()
-      console.log('✅ ResourceForm initialisé')
+    onMounted(async () => {
+      console.log('🔧 ResourceForm monté - Initialisation...')
+
+      try {
+        // Charger les ressources existantes
+        const result = await window.electronAPI.loadResources()
+        if (result.success) {
+          existingResources.value = result.data.resources || []
+          console.log('📚 Ressources existantes chargées:', existingResources.value.length)
+        }
+
+        // Initialiser le formulaire
+        await initializeForm()
+
+        console.log('✅ ResourceForm initialisé')
+      } catch (error) {
+        console.error('❌ Erreur lors de l\'initialisation:', error)
+      }
     })
 
     return {
@@ -574,12 +725,15 @@ window.ResourceForm = {
       frTranslations,
       enTranslations,
       pdfFiles,
+      existingResources,
 
       // Computed
       isFormValid,
 
       // Méthodes
       validateId,
+      validateIdField,
+      generateId,
       selectPdfFile,
       getFileName,
       handleSubmit
