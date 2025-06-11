@@ -1,5 +1,7 @@
 // src/main/services/codeGenerator.js
-// 🔧 GÉNÉRATEUR DE CODE COMPLET AVEC TRADUCTION AUTOMATIQUE
+// Complete code generator service with automatic translation integration
+// Uses Babel AST for parsing and generating JavaScript/Vue code
+
 const { parse } = require('@babel/parser')
 const traverse = require('@babel/traverse').default || require('@babel/traverse')
 const generate = require('@babel/generator').default || require('@babel/generator')
@@ -7,13 +9,18 @@ const t = require('@babel/types')
 const prettier = require('prettier')
 
 /**
- * Service de génération de code complet
- * Utilise l'AST de Babel pour modifier et générer le nouveau code
- * + Traduction automatique intégrée
+ * Code generation service that uses Babel AST to modify and generate new code
+ * Supports automatic translation integration for resource management
  */
 
+// ==========================================
+// AST UTILITY FUNCTIONS
+// ==========================================
+
 /**
- * Crée l'AST pour une valeur
+ * Creates AST node for any JavaScript value
+ * @param {*} value - Value to convert to AST
+ * @returns {Object} Babel AST node
  */
 function createValueAST(value) {
   if (typeof value === 'string') {
@@ -35,12 +42,14 @@ function createValueAST(value) {
 }
 
 /**
- * Crée l'AST pour une ressource
+ * Creates AST node for a resource object
+ * @param {Object} resource - Resource object to convert
+ * @returns {Object} Babel AST object expression
  */
 function createResourceAST(resource) {
   const properties = []
 
-  // Ajouter toutes les propriétés de la ressource
+  // Add all non-empty resource properties
   for (const [key, value] of Object.entries(resource)) {
     if (value !== undefined && value !== null && value !== '') {
       properties.push(
@@ -56,12 +65,14 @@ function createResourceAST(resource) {
 }
 
 /**
- * Crée l'AST pour les traductions d'une ressource
+ * Creates AST node for translation resource object
+ * @param {Object} translations - Translation object to convert
+ * @returns {Object} Babel AST object expression
  */
 function createTranslationResourceAST(translations) {
   const properties = []
 
-  // Nettoyer et ajouter les traductions
+  // Clean and standardize translations
   const cleanedTranslations = {
     title: String(translations.title || ''),
     description: String(translations.description || ''),
@@ -84,7 +95,10 @@ function createTranslationResourceAST(translations) {
 }
 
 /**
- * Trouve l'index d'une ressource dans le tableau AST
+ * Finds the index of a resource in an array AST expression
+ * @param {Object} arrayExpression - Babel array expression AST
+ * @param {string} resourceId - Resource ID to find
+ * @returns {number} Index of resource or -1 if not found
  */
 function findResourceIndexInArray(arrayExpression, resourceId) {
   return arrayExpression.elements.findIndex(element => {
@@ -100,26 +114,29 @@ function findResourceIndexInArray(arrayExpression, resourceId) {
   })
 }
 
-/**
- * 🎯 FONCTIONS AST POUR LES TRADUCTIONS
- */
+// ==========================================
+// TRANSLATIONS FILE AST FUNCTIONS
+// ==========================================
 
 /**
- * Parse le fichier translations.js et retourne l'AST
+ * Parses translations.js file and returns AST
+ * @param {string} content - File content to parse
+ * @returns {Object} Babel AST
+ * @throws {Error} If parsing fails
  */
 function parseTranslationsFile(content) {
   try {
-    // Extraire la section d'export
+    // Extract export section
     const exportMatch = content.match(/export\s+const\s+translations\s*=\s*([\s\S]*?)(?:\n\s*$|$)/)
     if (!exportMatch) {
-      throw new Error('Export const translations non trouvé')
+      throw new Error('Export const translations not found')
     }
 
     const objectContent = exportMatch[1].trim()
-    // Enlever le point-virgule final s'il existe
+    // Remove trailing semicolon if present
     const cleanContent = objectContent.replace(/;?\s*$/, '')
 
-    // Parser avec Babel
+    // Parse with Babel
     const ast = parse(`const translations = ${cleanContent}`, {
       sourceType: 'module',
       plugins: ['objectRestSpread']
@@ -127,12 +144,16 @@ function parseTranslationsFile(content) {
 
     return ast
   } catch (error) {
-    throw new Error(`Erreur parsing translations.js: ${error.message}`)
+    throw new Error(`Error parsing translations.js: ${error.message}`)
   }
 }
 
 /**
- * Trouve et nettoie/crée la section exercises pour une langue et matière
+ * Finds and cleans/creates the exercises section for a language and subject
+ * @param {Object} ast - Babel AST
+ * @param {string} lang - Language code ('fr' or 'en')
+ * @param {string} subject - Subject key
+ * @returns {Object|null} Exercises section AST node
  */
 function findAndCleanExercisesSection(ast, lang, subject) {
   let exercisesSection = null
@@ -143,14 +164,14 @@ function findAndCleanExercisesSection(ast, lang, subject) {
         const translationsObj = path.node.init
 
         if (t.isObjectExpression(translationsObj)) {
-          // Trouver la langue (fr ou en)
+          // Find language (fr or en)
           let langProperty = translationsObj.properties.find(prop =>
             t.isObjectProperty(prop) &&
             t.isIdentifier(prop.key, { name: lang })
           )
 
           if (!langProperty) {
-            // Créer la langue si elle n'existe pas
+            // Create language if it doesn't exist
             langProperty = t.objectProperty(
               t.identifier(lang),
               t.objectExpression([])
@@ -159,7 +180,7 @@ function findAndCleanExercisesSection(ast, lang, subject) {
           }
 
           if (t.isObjectExpression(langProperty.value)) {
-            // Trouver ou créer resources
+            // Find or create resources
             let resourcesProperty = langProperty.value.properties.find(prop =>
               t.isObjectProperty(prop) &&
               t.isIdentifier(prop.key, { name: 'resources' })
@@ -174,7 +195,7 @@ function findAndCleanExercisesSection(ast, lang, subject) {
             }
 
             if (t.isObjectExpression(resourcesProperty.value)) {
-              // Trouver ou créer exercises
+              // Find or create exercises
               let exercisesProperty = resourcesProperty.value.properties.find(prop =>
                 t.isObjectProperty(prop) &&
                 t.isIdentifier(prop.key, { name: 'exercises' })
@@ -189,7 +210,7 @@ function findAndCleanExercisesSection(ast, lang, subject) {
               }
 
               if (t.isObjectExpression(exercisesProperty.value)) {
-                // Trouver ou créer la matière
+                // Find or create subject
                 let subjectProperty = exercisesProperty.value.properties.find(prop =>
                   t.isObjectProperty(prop) &&
                   t.isIdentifier(prop.key, { name: subject })
@@ -203,37 +224,37 @@ function findAndCleanExercisesSection(ast, lang, subject) {
                   exercisesProperty.value.properties.push(subjectProperty)
                 }
 
-                // 🔧 NETTOYAGE AUTOMATIQUE DES STRUCTURES CORROMPUES
+                // Automatic cleanup of corrupted nested structures
                 if (t.isObjectExpression(subjectProperty.value)) {
-                  // Nettoyer les ressources imbriquées incorrectement
+                  // Clean up incorrectly nested resources
                   const cleanedProperties = []
 
                   subjectProperty.value.properties.forEach(prop => {
                     if (t.isObjectProperty(prop) && t.isObjectExpression(prop.value)) {
-                      // Vérifier si cette propriété contient des ressources imbriquées
+                      // Check if this property contains nested resources
                       const resourceProps = []
                       const nestedResources = []
 
                       prop.value.properties.forEach(innerProp => {
                         if (t.isObjectProperty(innerProp)) {
-                          // Si c'est une propriété standard (title, description, etc.)
+                          // If it's a standard property (title, description, etc.)
                           if (['title', 'description', 'fullDescription', 'notes'].includes(innerProp.key.name)) {
                             resourceProps.push(innerProp)
                           } else if (t.isObjectExpression(innerProp.value)) {
-                            // Si c'est une ressource imbriquée, l'extraire
+                            // If it's a nested resource, extract it
                             nestedResources.push(t.objectProperty(innerProp.key, innerProp.value))
                           }
                         }
                       })
 
-                      // Reconstruire la propriété avec seulement les props standards
+                      // Rebuild property with only standard props
                       const cleanedResource = t.objectProperty(
                         prop.key,
                         t.objectExpression(resourceProps)
                       )
                       cleanedProperties.push(cleanedResource)
 
-                      // Ajouter les ressources imbriquées au niveau correct
+                      // Add nested resources at correct level
                       nestedResources.forEach(nested => {
                         cleanedProperties.push(nested)
                       })
@@ -242,11 +263,11 @@ function findAndCleanExercisesSection(ast, lang, subject) {
                     }
                   })
 
-                  // Remplacer les propriétés par la version nettoyée
+                  // Replace properties with cleaned version
                   subjectProperty.value.properties = cleanedProperties
                   exercisesSection = subjectProperty.value
                 } else {
-                  // Recréer la section si elle n'est pas un objet
+                  // Recreate section if it's not an object
                   subjectProperty.value = t.objectExpression([])
                   exercisesSection = subjectProperty.value
                 }
@@ -262,16 +283,21 @@ function findAndCleanExercisesSection(ast, lang, subject) {
 }
 
 /**
- * Ajoute ou met à jour une ressource dans l'AST des traductions
+ * Adds or updates a resource in the translations AST
+ * @param {Object} ast - Babel AST
+ * @param {string} lang - Language code
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID
+ * @param {Object} translations - Translation object
  */
 function addOrUpdateResourceInAST(ast, lang, subject, resourceId, translations) {
   const exercisesSection = findAndCleanExercisesSection(ast, lang, subject)
 
   if (!exercisesSection) {
-    throw new Error(`Impossible de trouver/créer la section ${lang}.resources.exercises.${subject}`)
+    throw new Error(`Cannot find/create section ${lang}.resources.exercises.${subject}`)
   }
 
-  // Chercher si la ressource existe déjà
+  // Check if resource already exists
   const existingResourceIndex = exercisesSection.properties.findIndex(prop =>
     t.isObjectProperty(prop) &&
     t.isIdentifier(prop.key, { name: resourceId })
@@ -280,61 +306,60 @@ function addOrUpdateResourceInAST(ast, lang, subject, resourceId, translations) 
   const resourceAST = createTranslationResourceAST(translations)
 
   if (existingResourceIndex !== -1) {
-    // Mettre à jour la ressource existante
+    // Update existing resource
     exercisesSection.properties[existingResourceIndex] = t.objectProperty(
       t.identifier(resourceId),
       resourceAST
     )
-    console.log(`✅ [AST] Ressource ${resourceId} mise à jour dans ${lang}.${subject}`)
   } else {
-    // Ajouter la nouvelle ressource
+    // Add new resource
     exercisesSection.properties.push(
       t.objectProperty(
         t.identifier(resourceId),
         resourceAST
       )
     )
-    console.log(`✅ [AST] Ressource ${resourceId} ajoutée dans ${lang}.${subject}`)
   }
 }
 
 /**
- * Supprime une ressource de l'AST des traductions
+ * Removes a resource from the translations AST
+ * @param {Object} ast - Babel AST
+ * @param {string} lang - Language code
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID to remove
  */
 function removeResourceFromAST(ast, lang, subject, resourceId) {
   const exercisesSection = findAndCleanExercisesSection(ast, lang, subject)
 
   if (!exercisesSection) {
-    console.warn(`Section ${lang}.resources.exercises.${subject} non trouvée pour suppression`)
     return
   }
 
-  // Filtrer pour supprimer la ressource
+  // Filter to remove the resource
   const originalLength = exercisesSection.properties.length
   exercisesSection.properties = exercisesSection.properties.filter(prop =>
     !(t.isObjectProperty(prop) && t.isIdentifier(prop.key, { name: resourceId }))
   )
-
-  if (exercisesSection.properties.length < originalLength) {
-    console.log(`✅ [AST] Ressource ${resourceId} supprimée de ${lang}.${subject}`)
-  } else {
-    console.warn(`⚠️ [AST] Ressource ${resourceId} non trouvée dans ${lang}.${subject}`)
-  }
 }
 
-/**
- * 🎯 FONCTIONS PRINCIPALES POUR APP.VUE
- */
+// ==========================================
+// APP.VUE MODIFICATION FUNCTIONS
+// ==========================================
 
 /**
- * Ajoute une nouvelle ressource au tableau resources dans App.vue
+ * Adds a new resource to the resources array in App.vue
+ * @param {string} appVueContent - App.vue file content
+ * @param {Object} newResource - Resource object to add
+ * @returns {string} Modified App.vue content
+ * @throws {Error} If modification fails
  */
 async function addResourceToAppVue(appVueContent, newResource) {
   try {
-    // Extraire la section script
+    // Extract script section
     const scriptMatch = appVueContent.match(/<script setup>([\s\S]*?)<\/script>/)
     if (!scriptMatch) {
-      throw new Error('Section <script setup> introuvable')
+      throw new Error('<script setup> section not found')
     }
 
     const scriptContent = scriptMatch[1]
@@ -343,26 +368,26 @@ async function addResourceToAppVue(appVueContent, newResource) {
       plugins: ['typescript', 'jsx']
     })
 
-    // Trouver et modifier le tableau resources
+    // Find and modify resources array
     traverse(ast, {
       VariableDeclarator(path) {
         if (
           t.isIdentifier(path.node.id, { name: 'resources' }) &&
           t.isArrayExpression(path.node.init)
         ) {
-          // Créer l'AST pour la nouvelle ressource
+          // Create AST for new resource
           const resourceAST = createResourceAST(newResource)
 
-          // Ajouter au tableau
+          // Add to array
           path.node.init.elements.push(resourceAST)
         }
       }
     })
 
-    // Générer le nouveau code
+    // Generate new code
     const { code } = generate(ast)
 
-    // Formatter avec Prettier
+    // Format with Prettier
     const formattedScript = await prettier.format(code, {
       parser: 'babel',
       semi: false,
@@ -372,7 +397,7 @@ async function addResourceToAppVue(appVueContent, newResource) {
       trailingComma: 'none'
     })
 
-    // Remplacer dans le contenu complet
+    // Replace in complete content
     const newAppVueContent = appVueContent.replace(
       /<script setup>([\s\S]*?)<\/script>/,
       `<script setup>${formattedScript}</script>`
@@ -380,18 +405,23 @@ async function addResourceToAppVue(appVueContent, newResource) {
 
     return newAppVueContent
   } catch (error) {
-    throw new Error(`Erreur lors de l'ajout de la ressource: ${error.message}`)
+    throw new Error(`Error adding resource: ${error.message}`)
   }
 }
 
 /**
- * Met à jour une ressource existante dans App.vue
+ * Updates an existing resource in App.vue
+ * @param {string} appVueContent - App.vue file content
+ * @param {string} resourceId - ID of resource to update
+ * @param {Object} updatedResource - Updated resource object
+ * @returns {string} Modified App.vue content
+ * @throws {Error} If modification fails
  */
 async function updateResourceInAppVue(appVueContent, resourceId, updatedResource) {
   try {
     const scriptMatch = appVueContent.match(/<script setup>([\s\S]*?)<\/script>/)
     if (!scriptMatch) {
-      throw new Error('Section <script setup> introuvable')
+      throw new Error('<script setup> section not found')
     }
 
     const scriptContent = scriptMatch[1]
@@ -400,28 +430,28 @@ async function updateResourceInAppVue(appVueContent, resourceId, updatedResource
       plugins: ['typescript', 'jsx']
     })
 
-    // Trouver et modifier la ressource
+    // Find and modify resource
     traverse(ast, {
       VariableDeclarator(path) {
         if (
           t.isIdentifier(path.node.id, { name: 'resources' }) &&
           t.isArrayExpression(path.node.init)
         ) {
-          // Trouver l'index de la ressource à modifier
+          // Find index of resource to modify
           const resourceIndex = findResourceIndexInArray(path.node.init, resourceId)
 
           if (resourceIndex !== -1) {
-            // Remplacer par la nouvelle ressource
+            // Replace with new resource
             const resourceAST = createResourceAST(updatedResource)
             path.node.init.elements[resourceIndex] = resourceAST
           } else {
-            throw new Error(`Ressource avec l'ID ${resourceId} introuvable`)
+            throw new Error(`Resource with ID ${resourceId} not found`)
           }
         }
       }
     })
 
-    // Générer et formatter le nouveau code
+    // Generate and format new code
     const { code } = generate(ast)
     const formattedScript = await prettier.format(code, {
       parser: 'babel',
@@ -439,18 +469,22 @@ async function updateResourceInAppVue(appVueContent, resourceId, updatedResource
 
     return newAppVueContent
   } catch (error) {
-    throw new Error(`Erreur lors de la mise à jour de la ressource: ${error.message}`)
+    throw new Error(`Error updating resource: ${error.message}`)
   }
 }
 
 /**
- * Supprime une ressource du tableau resources dans App.vue
+ * Removes a resource from the resources array in App.vue
+ * @param {string} appVueContent - App.vue file content
+ * @param {string} resourceId - ID of resource to remove
+ * @returns {string} Modified App.vue content
+ * @throws {Error} If modification fails
  */
 async function removeResourceFromAppVue(appVueContent, resourceId) {
   try {
     const scriptMatch = appVueContent.match(/<script setup>([\s\S]*?)<\/script>/)
     if (!scriptMatch) {
-      throw new Error('Section <script setup> introuvable')
+      throw new Error('<script setup> section not found')
     }
 
     const scriptContent = scriptMatch[1]
@@ -459,14 +493,14 @@ async function removeResourceFromAppVue(appVueContent, resourceId) {
       plugins: ['typescript', 'jsx']
     })
 
-    // Trouver et supprimer la ressource
+    // Find and remove resource
     traverse(ast, {
       VariableDeclarator(path) {
         if (
           t.isIdentifier(path.node.id, { name: 'resources' }) &&
           t.isArrayExpression(path.node.init)
         ) {
-          // Filtrer les éléments pour supprimer la ressource
+          // Filter elements to remove resource
           path.node.init.elements = path.node.init.elements.filter(element => {
             if (t.isObjectExpression(element)) {
               const idProperty = element.properties.find(prop =>
@@ -474,7 +508,7 @@ async function removeResourceFromAppVue(appVueContent, resourceId) {
                 t.isIdentifier(prop.key, { name: 'id' }) &&
                 t.isStringLiteral(prop.value, { value: resourceId })
               )
-              return !idProperty // Garder si pas trouvé (donc supprimer si trouvé)
+              return !idProperty // Keep if not found (remove if found)
             }
             return true
           })
@@ -482,7 +516,7 @@ async function removeResourceFromAppVue(appVueContent, resourceId) {
       }
     })
 
-    // Générer et formatter le nouveau code
+    // Generate and format new code
     const { code } = generate(ast)
     const formattedScript = await prettier.format(code, {
       parser: 'babel',
@@ -500,36 +534,41 @@ async function removeResourceFromAppVue(appVueContent, resourceId) {
 
     return newAppVueContent
   } catch (error) {
-    throw new Error(`Erreur lors de la suppression de la ressource: ${error.message}`)
+    throw new Error(`Error removing resource: ${error.message}`)
   }
 }
 
-/**
- * 🚀 FONCTIONS AVEC AST POUR LES TRADUCTIONS
- */
+// ==========================================
+// TRANSLATIONS MANAGEMENT FUNCTIONS
+// ==========================================
 
 /**
- * Ajoute les traductions pour une nouvelle ressource (VERSION AST CORRIGÉE)
+ * Adds translations for a new resource using AST
+ * @param {string} translationsContent - translations.js file content
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID
+ * @param {Object} frTranslations - French translations
+ * @param {Object} enTranslations - English translations
+ * @returns {string} Modified translations.js content
+ * @throws {Error} If modification fails
  */
 async function addTranslationsForResource(translationsContent, subject, resourceId, frTranslations, enTranslations) {
   try {
-    console.log(`🎯 [AST] Ajout traductions ${subject}/${resourceId}`)
-
-    // Parser le fichier avec AST
+    // Parse file with AST
     const ast = parseTranslationsFile(translationsContent)
 
-    // Ajouter les traductions française et anglaise
+    // Add French and English translations
     addOrUpdateResourceInAST(ast, 'fr', subject, resourceId, frTranslations)
     addOrUpdateResourceInAST(ast, 'en', subject, resourceId, enTranslations)
 
-    // Générer le nouveau code
+    // Generate new code
     const { code } = generate(ast, {
       minified: false,
       concise: false,
       retainLines: false
     })
 
-    // Formatter avec Prettier
+    // Format with Prettier
     const formattedCode = await prettier.format(code, {
       parser: 'babel',
       semi: false,
@@ -540,43 +579,46 @@ async function addTranslationsForResource(translationsContent, subject, resource
       printWidth: 120
     })
 
-    // Reconstruire le fichier complet avec export
+    // Rebuild complete file with export
     const newContent = `// src/i18n/translations.js
-// 🌍 FICHIER CENTRAL DE TOUTES LES TRADUCTIONS
+// Central file for all translations
 
 export const ${formattedCode.replace('const ', '').replace(/;\s*$/, '')}`
 
-    console.log('✅ [AST] Traductions ajoutées avec succès')
     return newContent
 
   } catch (error) {
-    console.error('❌ [AST] Erreur ajout traductions:', error.message)
-    throw new Error(`Erreur lors de l'ajout des traductions: ${error.message}`)
+    throw new Error(`Error adding translations: ${error.message}`)
   }
 }
 
 /**
- * Met à jour les traductions pour une ressource existante (VERSION AST CORRIGÉE)
+ * Updates translations for an existing resource using AST
+ * @param {string} translationsContent - translations.js file content
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID
+ * @param {Object} frTranslations - French translations
+ * @param {Object} enTranslations - English translations
+ * @returns {string} Modified translations.js content
+ * @throws {Error} If modification fails
  */
 async function updateTranslationsForResource(translationsContent, subject, resourceId, frTranslations, enTranslations) {
   try {
-    console.log(`🎯 [AST] Mise à jour traductions ${subject}/${resourceId}`)
-
-    // Parser le fichier avec AST
+    // Parse file with AST
     const ast = parseTranslationsFile(translationsContent)
 
-    // Mettre à jour les traductions française et anglaise
+    // Update French and English translations
     addOrUpdateResourceInAST(ast, 'fr', subject, resourceId, frTranslations)
     addOrUpdateResourceInAST(ast, 'en', subject, resourceId, enTranslations)
 
-    // Générer le nouveau code
+    // Generate new code
     const { code } = generate(ast, {
       minified: false,
       concise: false,
       retainLines: false
     })
 
-    // Formatter avec Prettier
+    // Format with Prettier
     const formattedCode = await prettier.format(code, {
       parser: 'babel',
       semi: false,
@@ -587,43 +629,44 @@ async function updateTranslationsForResource(translationsContent, subject, resou
       printWidth: 120
     })
 
-    // Reconstruire le fichier complet avec export
+    // Rebuild complete file with export
     const newContent = `// src/i18n/translations.js
-// 🌍 FICHIER CENTRAL DE TOUTES LES TRADUCTIONS
+// Central file for all translations
 
 export const ${formattedCode.replace('const ', '').replace(/;\s*$/, '')}`
 
-    console.log('✅ [AST] Traductions mises à jour avec succès')
     return newContent
 
   } catch (error) {
-    console.error('❌ [AST] Erreur mise à jour traductions:', error.message)
-    throw new Error(`Erreur lors de la mise à jour des traductions: ${error.message}`)
+    throw new Error(`Error updating translations: ${error.message}`)
   }
 }
 
 /**
- * Supprime les traductions pour une ressource (VERSION AST CORRIGÉE)
+ * Removes translations for a resource using AST
+ * @param {string} translationsContent - translations.js file content
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID
+ * @returns {string} Modified translations.js content
+ * @throws {Error} If modification fails
  */
 async function removeTranslationsForResource(translationsContent, subject, resourceId) {
   try {
-    console.log(`🎯 [AST] Suppression traductions ${subject}/${resourceId}`)
-
-    // Parser le fichier avec AST
+    // Parse file with AST
     const ast = parseTranslationsFile(translationsContent)
 
-    // Supprimer les traductions française et anglaise
+    // Remove French and English translations
     removeResourceFromAST(ast, 'fr', subject, resourceId)
     removeResourceFromAST(ast, 'en', subject, resourceId)
 
-    // Générer le nouveau code
+    // Generate new code
     const { code } = generate(ast, {
       minified: false,
       concise: false,
       retainLines: false
     })
 
-    // Formatter avec Prettier
+    // Format with Prettier
     const formattedCode = await prettier.format(code, {
       parser: 'babel',
       semi: false,
@@ -634,31 +677,33 @@ async function removeTranslationsForResource(translationsContent, subject, resou
       printWidth: 120
     })
 
-    // Reconstruire le fichier complet avec export
+    // Rebuild complete file with export
     const newContent = `// src/i18n/translations.js
-// 🌍 FICHIER CENTRAL DE TOUTES LES TRADUCTIONS
+// Central file for all translations
 
 export const ${formattedCode.replace('const ', '').replace(/;\s*$/, '')}`
 
-    console.log('✅ [AST] Traductions supprimées avec succès')
     return newContent
 
   } catch (error) {
-    console.error('❌ [AST] Erreur suppression traductions:', error.message)
-    throw new Error(`Erreur lors de la suppression des traductions: ${error.message}`)
+    throw new Error(`Error removing translations: ${error.message}`)
   }
 }
 
-/**
- * 🌐 FONCTIONS DE TRADUCTION AUTOMATIQUE
- */
+// ==========================================
+// AUTOMATIC TRANSLATION FUNCTIONS
+// ==========================================
 
 /**
- * Service de traduction simple pour intégration
+ * Simple translation service for integration
+ * @param {string} text - Text to translate
+ * @param {string} fromLang - Source language code
+ * @param {string} toLang - Target language code
+ * @returns {string} Translated text or original if translation fails
  */
 async function translateText(text, fromLang = 'fr', toLang = 'en') {
   try {
-    // Utilise LibreTranslate par défaut
+    // Use LibreTranslate by default
     const response = await fetch('https://libretranslate.de/translate', {
       method: 'POST',
       headers: {
@@ -679,48 +724,48 @@ async function translateText(text, fromLang = 'fr', toLang = 'en') {
     const result = await response.json()
     return result.translatedText || text
   } catch (error) {
-    console.error('Translation error:', error)
-    return text // Retourner le texte original en cas d'erreur
+    // Return original text on error
+    return text
   }
 }
 
 /**
- * Ajoute une ressource avec traduction automatique
+ * Adds a resource with automatic translation
+ * @param {string} translationsContent - translations.js file content
+ * @param {string} subject - Subject key
+ * @param {string} resourceId - Resource ID
+ * @param {Object} frTranslations - French translations
+ * @param {Object} options - Translation options
+ * @returns {string} Modified translations.js content
  */
 async function addResourceWithAutoTranslation(translationsContent, subject, resourceId, frTranslations, options = {}) {
   try {
-    console.log(`🌐 [AUTO] Traduction automatique activée pour ${subject}/${resourceId}`)
-
     let enTranslations = {}
 
     if (options.enableAutoTranslation) {
-      // Traduire chaque champ
+      // Translate each field
       const fieldsToTranslate = ['title', 'description', 'fullDescription', 'notes']
 
       for (const field of fieldsToTranslate) {
         if (frTranslations[field] && frTranslations[field].trim()) {
-          console.log(`🔄 Traduction de ${field}...`)
           enTranslations[field] = await translateText(frTranslations[field])
 
-          // Petit délai pour éviter de surcharger l'API
+          // Small delay to avoid overwhelming the API
           await new Promise(resolve => setTimeout(resolve, 500))
         } else {
           enTranslations[field] = frTranslations[field] || ''
         }
       }
-
-      console.log('✅ [AUTO] Traduction automatique terminée')
     } else {
-      // Utiliser les traductions manuelles fournies
+      // Use manual translations provided
       enTranslations = options.enTranslations || frTranslations
     }
 
-    // Ajouter les traductions avec la fonction AST existante
+    // Add translations with existing AST function
     return await addTranslationsForResource(translationsContent, subject, resourceId, frTranslations, enTranslations)
 
   } catch (error) {
-    console.error('❌ [AUTO] Erreur traduction automatique:', error.message)
-    // En cas d'erreur, utiliser les traductions françaises pour l'anglais
+    // On error, use French translations for English
     return await addTranslationsForResource(translationsContent, subject, resourceId, frTranslations, frTranslations)
   }
 }

@@ -2,17 +2,21 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 /**
- * Bridge sécurisé entre Main et Renderer
- * Expose les fonctions IPC de manière contrôlée
+ * Secure bridge between Main and Renderer processes
+ * Exposes IPC functions in a controlled manner
  */
 
-// API exposée à l'interface utilisateur
+// API exposed to the user interface
 const electronAPI = {
-  // === GESTION DU PROJET WEB ===
+  // ==========================================
+  // WEB PROJECT MANAGEMENT
+  // ==========================================
   validateWebProject: () => ipcRenderer.invoke('validate-web-project'),
   getWebProjectInfo: () => ipcRenderer.invoke('get-web-project-info'),
 
-  // === GESTION DES RESSOURCES ===
+  // ==========================================
+  // RESOURCE MANAGEMENT
+  // ==========================================
   loadResources: () => ipcRenderer.invoke('load-resources'),
   addResource: (resource, frTranslations, enTranslations, pdfFiles = {}) =>
     ipcRenderer.invoke('add-resource', {
@@ -36,46 +40,56 @@ const electronAPI = {
       pdfPaths
     }),
 
-  // === GESTION DES TRADUCTIONS ===
+  // ==========================================
+  // TRANSLATION MANAGEMENT
+  // ==========================================
   getResourceTranslations: (params) => ipcRenderer.invoke('get-resource-translations', params),
 
-  // 🌍 === NOUVELLES APIs DE TRADUCTION AUTOMATIQUE ===
+  // Automatic translation APIs
   translateResourceAuto: (data) => ipcRenderer.invoke('translate-resource-auto', data),
   updateResourceTranslations: (data) => ipcRenderer.invoke('update-resource-translations', data),
   testTranslationServices: () => ipcRenderer.invoke('test-translation-services'),
 
-  // Écouter les événements de progression de traduction
+  // Listen to translation progress events
   onTranslationProgress: (callback) => {
     ipcRenderer.on('translation-progress', (event, data) => callback(data))
   },
 
-  // Nettoyer les listeners de traduction
+  // Clean up translation listeners
   removeTranslationProgressListener: () => {
     ipcRenderer.removeAllListeners('translation-progress')
   },
 
-  // === GESTION DES FICHIERS ===
+  // ==========================================
+  // FILE MANAGEMENT
+  // ==========================================
   selectPdfFile: (title) => ipcRenderer.invoke('select-pdf-file', title),
   listPdfFiles: () => ipcRenderer.invoke('list-pdf-files'),
 
-  // === VALIDATION ===
+  // ==========================================
+  // VALIDATION
+  // ==========================================
   validateResource: (resource) => ipcRenderer.invoke('validate-resource', resource),
   validateTranslations: (translations) => ipcRenderer.invoke('validate-translations', translations),
   generateUniqueId: (baseId, existingResources) =>
     ipcRenderer.invoke('generate-unique-id', { baseId, existingResources }),
 
-  // === SAUVEGARDE ET RESTAURATION ===
+  // ==========================================
+  // BACKUP AND RESTORATION
+  // ==========================================
   restoreBackup: (backupDir) => ipcRenderer.invoke('restore-backup', backupDir),
 
-  // === UTILITAIRES ===
+  // ==========================================
+  // UTILITIES
+  // ==========================================
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   logUserAction: (action, data) => ipcRenderer.invoke('log-user-action', action, data)
 }
 
-// Expose l'API dans le contexte du renderer de manière sécurisée
+// Expose the API in the renderer context securely
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
 
-// Expose aussi quelques constantes utiles
+// Expose useful constants
 contextBridge.exposeInMainWorld('appConstants', {
   SUBJECTS: ['maths', 'physics', 'chemistry'],
   LEVELS: ['terminale', 'prepa1', 'prepa2'],
@@ -98,8 +112,13 @@ contextBridge.exposeInMainWorld('appConstants', {
   }
 })
 
-// Helper pour la gestion d'erreurs côté renderer
+// Helper for error handling in the renderer
 contextBridge.exposeInMainWorld('errorHandler', {
+  /**
+   * Formats error objects into readable strings
+   * @param {*} error - Error to format
+   * @returns {string} Formatted error message
+   */
   formatError: (error) => {
     if (typeof error === 'string') {
       return error
@@ -113,22 +132,32 @@ contextBridge.exposeInMainWorld('errorHandler', {
       return error.message
     }
 
-    return 'Une erreur inconnue s\'est produite'
+    return 'An unknown error occurred'
   },
 
+  /**
+   * Checks if a response contains an error
+   * @param {Object} response - Response object to check
+   * @returns {boolean} True if response has an error
+   */
   hasError: (response) => {
     return !response || !response.success || response.error
   },
 
+  /**
+   * Extracts error message from response
+   * @param {Object} response - Response object
+   * @returns {string|null} Error message or null
+   */
   getError: (response) => {
-    if (!response) return 'Aucune réponse reçue'
+    if (!response) return 'No response received'
     if (response.error) return response.error
-    if (!response.success) return 'Opération échouée'
+    if (!response.success) return 'Operation failed'
     return null
   }
 })
 
-// Utilitaires pour le debugging en mode développement
+// Development utilities (only in dev mode)
 if (process.argv.includes('--dev')) {
   contextBridge.exposeInMainWorld('devTools', {
     log: (...args) => console.log('[RENDERER]', ...args),
@@ -137,5 +166,3 @@ if (process.argv.includes('--dev')) {
     info: (...args) => console.info('[RENDERER INFO]', ...args)
   })
 }
-
-console.log('🔧 Preload script loaded - Bridge IPC ready with translation APIs!')

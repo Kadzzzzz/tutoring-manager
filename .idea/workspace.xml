@@ -6,27 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="6a4aa05a-5cf7-4338-9d44-3e296a654a6d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/diagnose-babel.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/diagnostic-site-resources.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/direct-translation-service.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/fix-translation.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/simple-test.js" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/main.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/services/codeGenerator.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/services/codeGenerator.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/services/directTranslationService.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/services/directTranslationService.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/services/directTranslationService.old" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/services/fix-translations.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/services/test-service.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/services/resourceParser.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/services/resourceParser.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/services/translationService.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/services/translationService.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/preload/preload.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/preload/preload.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/renderer/components/ResourceForm.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/renderer/components/ResourceForm.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/renderer/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/renderer/style.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-app.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-ast-translation.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-complete.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-parsing.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-quick.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-simple.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test-translation.js" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -103,7 +88,7 @@
       <workItem from="1749162443392" duration="3379000" />
       <workItem from="1749216069658" duration="5162000" />
       <workItem from="1749235312406" duration="162000" />
-      <workItem from="1749492933665" duration="13904000" />
+      <workItem from="1749492933665" duration="16696000" />
     </task>
     <servers />
   </component>

@@ -3,18 +3,18 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
 const DirectTranslationService = require('./services/directTranslationService')
 
-// Import des services
+// Import services
 const fileService = require('./services/fileService.js')
 const resourceParser = require('./services/resourceParser.js')
 const codeGenerator = require('./services/codeGenerator.js')
 
-// Initialiser les services
+// Initialize services
 const directTranslationService = new DirectTranslationService()
 
 let mainWindow
 
 /**
- * Crée la fenêtre principale de l'application
+ * Creates the main application window
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -29,36 +29,38 @@ function createMainWindow() {
       nodeIntegration: false
     },
     titleBarStyle: 'default',
-    show: false // Ne pas montrer tant que pas prêt
+    show: false // Don't show until ready
   })
 
-  // Charger l'interface
+  // Load the interface
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
 
-  // Afficher quand prêt
+  // Show when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
 
-    // Ouvrir DevTools en mode développement
+    // Open DevTools in development mode
     if (process.argv.includes('--dev')) {
       mainWindow.webContents.openDevTools()
     }
   })
 
-  // Gérer la fermeture
+  // Handle window closing
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
 /**
- * Configuration des IPC handlers pour exposer les services
+ * Sets up IPC handlers to expose services to the renderer
  */
 function setupIpcHandlers() {
 
-  // === GESTION DES FICHIERS ===
+  // ==========================================
+  // FILE MANAGEMENT
+  // ==========================================
 
-  // Validation du projet web
+  // Validate web project
   ipcMain.handle('validate-web-project', async () => {
     try {
       await fileService.validateWebProject()
@@ -68,7 +70,7 @@ function setupIpcHandlers() {
     }
   })
 
-  // Informations sur le projet web
+  // Get web project information
   ipcMain.handle('get-web-project-info', async () => {
     try {
       const info = await fileService.getWebProjectInfo()
@@ -78,9 +80,11 @@ function setupIpcHandlers() {
     }
   })
 
-  // === GESTION DES RESSOURCES ===
+  // ==========================================
+  // RESOURCE MANAGEMENT
+  // ==========================================
 
-  // Charger toutes les ressources existantes
+  // Load all existing resources
   ipcMain.handle('load-resources', async () => {
     try {
       const appVueContent = await fileService.readAppVue()
@@ -103,36 +107,30 @@ function setupIpcHandlers() {
     }
   })
 
-  // === GESTION DES TRADUCTIONS (SIMPLE) ===
-
   /**
-   * Récupère les traductions d'une ressource existante
+   * Retrieves translations for an existing resource
    */
   ipcMain.handle('get-resource-translations', async (event, { subject, resourceId }) => {
     try {
-      console.log(`🔍 [MAIN] Récupération traductions pour ${subject}/${resourceId}`)
-
-      // Lire le fichier translations.js (comme pour load-resources)
+      // Read translations.js file
       const translationsContent = await fileService.readTranslations()
       const allTranslations = resourceParser.extractTranslationsFromFile(translationsContent)
 
-      // Extraire les traductions pour cette ressource spécifique
+      // Extract translations for this specific resource
       const resourceTranslations = {
         fr: {},
         en: {}
       }
 
-      // Traductions françaises
+      // French translations
       if (allTranslations.fr?.resources?.exercises?.[subject]?.[resourceId]) {
         resourceTranslations.fr = allTranslations.fr.resources.exercises[subject][resourceId]
       }
 
-      // Traductions anglaises
+      // English translations
       if (allTranslations.en?.resources?.exercises?.[subject]?.[resourceId]) {
         resourceTranslations.en = allTranslations.en.resources.exercises[subject][resourceId]
       }
-
-      console.log(`✅ [MAIN] Traductions trouvées:`, resourceTranslations)
 
       return {
         success: true,
@@ -140,7 +138,6 @@ function setupIpcHandlers() {
       }
 
     } catch (error) {
-      console.error('❌ [MAIN] Erreur récupération traductions:', error.message)
       return {
         success: false,
         error: error.message
@@ -148,14 +145,14 @@ function setupIpcHandlers() {
     }
   })
 
-  // Ajouter une nouvelle ressource
+  // Add a new resource
   ipcMain.handle('add-resource', async (event, { resource, frTranslations, enTranslations, pdfFiles }) => {
     try {
-      // Créer une sauvegarde
+      // Create a backup
       const backupDir = await fileService.createBackup()
 
       try {
-        // Copier les PDFs si fournis
+        // Copy PDFs if provided
         if (pdfFiles?.statement) {
           resource.pdfStatement = await fileService.copyPdfFile(
             pdfFiles.statement,
@@ -174,12 +171,12 @@ function setupIpcHandlers() {
           )
         }
 
-        // Modifier App.vue
+        // Modify App.vue
         const appVueContent = await fileService.readAppVue()
         const newAppVueContent = await codeGenerator.addResourceToAppVue(appVueContent, resource)
         await fileService.writeAppVue(newAppVueContent)
 
-        // Modifier translations.js
+        // Modify translations.js
         const translationsContent = await fileService.readTranslations()
         const newTranslationsContent = await codeGenerator.addTranslationsForResource(
           translationsContent,
@@ -192,12 +189,12 @@ function setupIpcHandlers() {
 
         return {
           success: true,
-          message: `Ressource "${resource.id}" ajoutée avec succès !`,
+          message: `Resource "${resource.id}" added successfully!`,
           backupDir
         }
 
       } catch (error) {
-        // Restaurer la sauvegarde en cas d'erreur
+        // Restore backup on error
         await fileService.restoreFromBackup(backupDir)
         throw error
       }
@@ -207,13 +204,13 @@ function setupIpcHandlers() {
     }
   })
 
-  // Mettre à jour une ressource existante
+  // Update an existing resource
   ipcMain.handle('update-resource', async (event, { oldResourceId, resource, frTranslations, enTranslations, pdfFiles }) => {
     try {
       const backupDir = await fileService.createBackup()
 
       try {
-        // Gérer les PDFs
+        // Handle PDFs
         if (pdfFiles?.statement) {
           resource.pdfStatement = await fileService.copyPdfFile(
             pdfFiles.statement,
@@ -232,12 +229,12 @@ function setupIpcHandlers() {
           )
         }
 
-        // Modifier App.vue
+        // Modify App.vue
         const appVueContent = await fileService.readAppVue()
         const newAppVueContent = await codeGenerator.updateResourceInAppVue(appVueContent, oldResourceId, resource)
         await fileService.writeAppVue(newAppVueContent)
 
-        // Modifier translations.js
+        // Modify translations.js
         const translationsContent = await fileService.readTranslations()
         const newTranslationsContent = await codeGenerator.updateTranslationsForResource(
           translationsContent,
@@ -250,7 +247,7 @@ function setupIpcHandlers() {
 
         return {
           success: true,
-          message: `Ressource "${resource.id}" mise à jour avec succès !`,
+          message: `Resource "${resource.id}" updated successfully!`,
           backupDir
         }
 
@@ -264,13 +261,13 @@ function setupIpcHandlers() {
     }
   })
 
-  // Supprimer une ressource
+  // Delete a resource
   ipcMain.handle('delete-resource', async (event, { resourceId, subject, pdfPaths }) => {
     try {
       const backupDir = await fileService.createBackup()
 
       try {
-        // Supprimer les PDFs
+        // Delete PDFs
         if (pdfPaths?.statement) {
           await fileService.deletePdfFile(pdfPaths.statement)
         }
@@ -278,12 +275,12 @@ function setupIpcHandlers() {
           await fileService.deletePdfFile(pdfPaths.solution)
         }
 
-        // Modifier App.vue
+        // Modify App.vue
         const appVueContent = await fileService.readAppVue()
         const newAppVueContent = await codeGenerator.removeResourceFromAppVue(appVueContent, resourceId)
         await fileService.writeAppVue(newAppVueContent)
 
-        // Modifier translations.js
+        // Modify translations.js
         const translationsContent = await fileService.readTranslations()
         const newTranslationsContent = await codeGenerator.removeTranslationsForResource(
           translationsContent,
@@ -294,7 +291,7 @@ function setupIpcHandlers() {
 
         return {
           success: true,
-          message: `Ressource "${resourceId}" supprimée avec succès !`,
+          message: `Resource "${resourceId}" deleted successfully!`,
           backupDir
         }
 
@@ -308,15 +305,17 @@ function setupIpcHandlers() {
     }
   })
 
-  // === GESTION DES FICHIERS ===
+  // ==========================================
+  // FILE OPERATIONS
+  // ==========================================
 
-  // Sélectionneur de fichiers PDF
-  ipcMain.handle('select-pdf-file', async (event, title = 'Sélectionner un fichier PDF') => {
+  // PDF file selector
+  ipcMain.handle('select-pdf-file', async (event, title = 'Select a PDF file') => {
     try {
       const result = await dialog.showOpenDialog(mainWindow, {
         title,
         filters: [
-          { name: 'Fichiers PDF', extensions: ['pdf'] }
+          { name: 'PDF Files', extensions: ['pdf'] }
         ],
         properties: ['openFile']
       })
@@ -331,7 +330,7 @@ function setupIpcHandlers() {
     }
   })
 
-  // Lister les PDFs existants
+  // List existing PDFs
   ipcMain.handle('list-pdf-files', async () => {
     try {
       const files = await fileService.listPdfFiles()
@@ -341,9 +340,11 @@ function setupIpcHandlers() {
     }
   })
 
-  // === UTILITAIRES ===
+  // ==========================================
+  // UTILITIES
+  // ==========================================
 
-  // Valider une ressource
+  // Validate a resource
   ipcMain.handle('validate-resource', async (event, resource) => {
     try {
       resourceParser.validateResource(resource)
@@ -353,7 +354,7 @@ function setupIpcHandlers() {
     }
   })
 
-  // Valider les traductions
+  // Validate translations
   ipcMain.handle('validate-translations', async (event, translations) => {
     try {
       resourceParser.validateResourceTranslations(translations)
@@ -363,7 +364,7 @@ function setupIpcHandlers() {
     }
   })
 
-  // Générer un ID unique
+  // Generate unique ID
   ipcMain.handle('generate-unique-id', async (event, { baseId, existingResources }) => {
     try {
       const uniqueId = resourceParser.generateUniqueId(existingResources, baseId)
@@ -373,11 +374,11 @@ function setupIpcHandlers() {
     }
   })
 
-  // Restaurer depuis une sauvegarde
+  // Restore from backup
   ipcMain.handle('restore-backup', async (event, backupDir) => {
     try {
       await fileService.restoreFromBackup(backupDir)
-      return { success: true, message: 'Sauvegarde restaurée avec succès !' }
+      return { success: true, message: 'Backup restored successfully!' }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -385,13 +386,13 @@ function setupIpcHandlers() {
 }
 
 /**
- * Initialisation de l'application
+ * Application initialization
  */
 app.whenReady().then(() => {
   setupIpcHandlers()
   createMainWindow()
 
-  // Réactivation sur macOS
+  // Reactivation on macOS
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow()
@@ -399,25 +400,23 @@ app.whenReady().then(() => {
   })
 })
 
-// ===============================================
-// 🌍 NOUVELLES APIs IPC POUR LA TRADUCTION
-// ===============================================
+// ==========================================
+// AUTOMATIC TRANSLATION IPC APIs
+// ==========================================
 
 /**
- * Traduit automatiquement une ressource FR → EN
+ * Automatically translates a resource from French to English
  */
 ipcMain.handle('translate-resource-auto', async (event, data) => {
   try {
-    console.log('🌍 IPC: translate-resource-auto appelé avec:', data)
-
     const { subject, resourceId, frTranslations, options = {} } = data
 
-    // Validation des paramètres
+    // Validate parameters
     if (!subject || !resourceId || !frTranslations) {
-      throw new Error('Paramètres manquants: subject, resourceId, et frTranslations requis')
+      throw new Error('Missing parameters: subject, resourceId, and frTranslations required')
     }
 
-    // Fonction de progression pour communiquer avec le renderer
+    // Progress function to communicate with renderer
     const onProgress = (message, completed, total) => {
       event.sender.send('translation-progress', {
         message,
@@ -427,7 +426,7 @@ ipcMain.handle('translate-resource-auto', async (event, data) => {
       })
     }
 
-    // Lancer la traduction automatique
+    // Launch automatic translation
     const result = await directTranslationService.translateResourceAutomatically(
       subject,
       resourceId,
@@ -435,14 +434,12 @@ ipcMain.handle('translate-resource-auto', async (event, data) => {
       { ...options, onProgress }
     )
 
-    console.log('✅ IPC: Traduction automatique terminée')
     return {
       success: true,
       data: result
     }
 
   } catch (error) {
-    console.error('❌ IPC: Erreur traduction automatique:', error.message)
     return {
       success: false,
       error: error.message
@@ -451,19 +448,14 @@ ipcMain.handle('translate-resource-auto', async (event, data) => {
 })
 
 /**
- * Met à jour manuellement les traductions d'une ressource
- */
-/**
- * Met à jour manuellement les traductions d'une ressource
+ * Manually updates resource translations
  */
 ipcMain.handle('update-resource-translations', async (event, data) => {
   try {
-    console.log('📝 IPC: update-resource-translations appelé avec:', data)
-
     const { subject, resourceId, frTranslations, enTranslations } = data
 
     if (!subject || !resourceId || !frTranslations || !enTranslations) {
-      throw new Error('Paramètres manquants')
+      throw new Error('Missing parameters')
     }
 
     await directTranslationService.updateResourceTranslations(
@@ -473,14 +465,12 @@ ipcMain.handle('update-resource-translations', async (event, data) => {
       enTranslations
     )
 
-    console.log('✅ IPC: Traductions mises à jour')
     return {
       success: true,
-      message: 'Traductions mises à jour avec succès'
+      message: 'Translations updated successfully'
     }
 
   } catch (error) {
-    console.error('❌ IPC: Erreur mise à jour traductions:', error.message)
     return {
       success: false,
       error: error.message
@@ -489,25 +479,19 @@ ipcMain.handle('update-resource-translations', async (event, data) => {
 })
 
 /**
- * Test de connectivité des services de traduction
+ * Tests translation service connectivity
  */
 ipcMain.handle('test-translation-services', async () => {
   try {
-    console.log('🧪 IPC: test-translation-services appelé')
-
-    // 🔧 CORRECTION: Utiliser require au lieu d'import dynamique
     const { translationService } = require('./services/translationService.js')
-
     const results = await translationService.testServices()
 
-    console.log('✅ IPC: Test des services terminé')
     return {
       success: true,
       data: results
     }
 
   } catch (error) {
-    console.error('❌ IPC: Erreur test services:', error.message)
     return {
       success: false,
       error: error.message
@@ -515,14 +499,14 @@ ipcMain.handle('test-translation-services', async () => {
   }
 })
 
-// Quitter quand toutes les fenêtres sont fermées
+// Quit when all windows are closed
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
 
-// Sécurité : empêcher la navigation vers des sites externes
+// Security: prevent navigation to external sites
 app.on('web-contents-created', (event, contents) => {
   contents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl)

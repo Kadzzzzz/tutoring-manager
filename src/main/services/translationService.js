@@ -1,5 +1,5 @@
 // src/main/services/translationService.js
-// 🌐 SERVICE DE TRADUCTION AUTOMATIQUE (Version CommonJS)
+// Automatic translation service supporting multiple providers
 
 class TranslationService {
   constructor() {
@@ -8,7 +8,11 @@ class TranslationService {
   }
 
   /**
-   * Traduit un texte avec LibreTranslate (gratuit, sans clé API)
+   * Translates text using LibreTranslate (free, no API key required)
+   * @param {string} text - Text to translate
+   * @param {string} fromLang - Source language code
+   * @param {string} toLang - Target language code
+   * @returns {string} Translated text
    */
   async translateWithLibreTranslate(text, fromLang = 'fr', toLang = 'en') {
     try {
@@ -32,13 +36,16 @@ class TranslationService {
       const result = await response.json()
       return result.translatedText || text
     } catch (error) {
-      console.error('LibreTranslate error:', error)
       throw error
     }
   }
 
   /**
-   * Traduit un texte avec MyMemory (gratuit, avec limites)
+   * Translates text using MyMemory (free with limits)
+   * @param {string} text - Text to translate
+   * @param {string} fromLang - Source language code
+   * @param {string} toLang - Target language code
+   * @returns {string} Translated text
    */
   async translateWithMyMemory(text, fromLang = 'fr', toLang = 'en') {
     try {
@@ -61,13 +68,17 @@ class TranslationService {
         throw new Error('MyMemory translation failed')
       }
     } catch (error) {
-      console.error('MyMemory error:', error)
       throw error
     }
   }
 
   /**
-   * Traduit un texte avec Google Translate API (nécessite clé API)
+   * Translates text using Google Translate API (requires API key)
+   * @param {string} text - Text to translate
+   * @param {string} fromLang - Source language code
+   * @param {string} toLang - Target language code
+   * @param {string} apiKey - Google API key
+   * @returns {string} Translated text
    */
   async translateWithGoogle(text, fromLang = 'fr', toLang = 'en', apiKey) {
     if (!apiKey) {
@@ -98,23 +109,25 @@ class TranslationService {
       const result = await response.json()
       return result.data.translations[0].translatedText
     } catch (error) {
-      console.error('Google Translate error:', error)
       throw error
     }
   }
 
   /**
-   * Fonction principale de traduction avec fallback
+   * Main translation function with fallback support
+   * @param {string} text - Text to translate
+   * @param {Object} options - Translation options
+   * @returns {string} Translated text
    */
   async translateText(text, options = {}) {
     const {
       fromLang = 'fr',
       toLang = 'en',
-      service = 'libretranslate', // 'libretranslate', 'mymemory', 'google'
+      service = 'libretranslate',
       googleApiKey = null
     } = options
 
-    // Ne pas traduire les textes très courts ou vides
+    // Skip very short or empty texts
     if (!text || text.length < 3) {
       return text
     }
@@ -130,15 +143,12 @@ class TranslationService {
           return await this.translateWithLibreTranslate(text, fromLang, toLang)
       }
     } catch (error) {
-      console.error(`Translation failed with ${service}, trying fallback:`, error)
-
-      // Fallback vers MyMemory si LibreTranslate échoue
+      // Fallback to MyMemory if LibreTranslate fails
       if (service === 'libretranslate') {
         try {
           return await this.translateWithMyMemory(text, fromLang, toLang)
         } catch (fallbackError) {
-          console.error('Fallback translation also failed:', fallbackError)
-          return text // Retourner le texte original en cas d'échec total
+          return text // Return original text if all methods fail
         }
       }
 
@@ -147,7 +157,10 @@ class TranslationService {
   }
 
   /**
-   * Traduit tous les champs d'une ressource
+   * Translates all fields of a resource object
+   * @param {Object} resourceData - Resource data to translate
+   * @param {Object} options - Translation options including progress callback
+   * @returns {Object} Translated resource data
    */
   async translateResource(resourceData, options = {}) {
     const {
@@ -167,7 +180,7 @@ class TranslationService {
     for (const field of fieldsToTranslate) {
       if (resourceData[field] && resourceData[field].trim()) {
         if (onProgress) {
-          onProgress(`Traduction de ${field}...`, completed, total)
+          onProgress(`Translating ${field}...`, completed, total)
         }
 
         try {
@@ -178,11 +191,11 @@ class TranslationService {
             googleApiKey
           })
 
-          // Petit délai pour éviter de surcharger l'API
+          // Small delay to avoid overwhelming the API
           await new Promise(resolve => setTimeout(resolve, 500))
         } catch (error) {
-          console.error(`Failed to translate ${field}:`, error)
-          translations[field] = resourceData[field] // Garder l'original en cas d'erreur
+          // Keep original text if translation fails
+          translations[field] = resourceData[field]
         }
       } else {
         translations[field] = resourceData[field] || ''
@@ -190,7 +203,7 @@ class TranslationService {
 
       completed++
       if (onProgress) {
-        onProgress(`${field} traduit`, completed, total)
+        onProgress(`${field} translated`, completed, total)
       }
     }
 
@@ -198,7 +211,8 @@ class TranslationService {
   }
 
   /**
-   * Test de connectivité des services
+   * Tests connectivity and availability of translation services
+   * @returns {Object} Service status results
    */
   async testServices() {
     const testText = "Bonjour"
@@ -210,13 +224,13 @@ class TranslationService {
       results.libretranslate = {
         status: 'ok',
         result: libretranslateResult,
-        message: 'Service disponible'
+        message: 'Service available'
       }
     } catch (error) {
       results.libretranslate = {
         status: 'error',
         error: error.message,
-        message: 'Service indisponible'
+        message: 'Service unavailable'
       }
     }
 
@@ -226,13 +240,13 @@ class TranslationService {
       results.mymemory = {
         status: 'ok',
         result: mymemoryResult,
-        message: 'Service disponible'
+        message: 'Service available'
       }
     } catch (error) {
       results.mymemory = {
         status: 'error',
         error: error.message,
-        message: 'Service indisponible'
+        message: 'Service unavailable'
       }
     }
 
@@ -240,7 +254,7 @@ class TranslationService {
   }
 }
 
-// 🔧 EXPORT COMMONJS (compatible Electron)
+// CommonJS export for Electron compatibility
 const translationService = new TranslationService()
 
 module.exports = {
