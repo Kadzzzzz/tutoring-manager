@@ -1,201 +1,252 @@
-// tutoring-manager/src/main/services/directTranslationService.js
 const fs = require('fs').promises
 const path = require('path')
 
 class DirectTranslationService {
   constructor() {
-    // 📁 Chemins corrects basés sur fileService.js
     this.webProjectPath = path.join(require('os').homedir(), 'Documents', 'tutoring-website')
     this.translationsPath = path.join(this.webProjectPath, 'src', 'i18n', 'translations.js')
-
-    console.log('🔧 DirectTranslationService initialisé')
-    console.log('📁 Projet web:', this.webProjectPath)
-    console.log('📄 Fichier traductions:', this.translationsPath)
   }
 
   /**
-   * 🎯 Récupère les traductions d'une ressource
-   * @param {string} subject - Matière (maths, physics, chemistry)
-   * @param {string} resourceId - ID de la ressource
-   * @returns {Object} { fr: {...}, en: {...} }
+   * Retrieves translations for a specific resource
    */
   async getResourceTranslations(subject, resourceId) {
     try {
-      console.log(`🔍 Récupération traductions: ${subject}/${resourceId}`)
-
-      // 1. Vérifier l'existence du fichier
       await this._verifyTranslationsFile()
-
-      // 2. Charger et parser les traductions
       const translations = await this._loadTranslationsWithRegex()
-
-      // 3. Extraire les traductions de la ressource
-      const result = this._extractResourceTranslations(translations, subject, resourceId)
-
-      console.log('✅ Traductions récupérées avec succès')
-      return result
-
+      return this._extractResourceTranslations(translations, subject, resourceId)
     } catch (error) {
-      console.error('❌ Erreur récupération traductions:', error.message)
-      throw new Error(`Impossible de récupérer les traductions pour ${subject}/${resourceId}: ${error.message}`)
+      throw new Error(`Unable to retrieve translations for ${subject}/${resourceId}: ${error.message}`)
     }
   }
 
   /**
-   * 🔍 Vérifie l'existence du fichier
+   * Updates resource translations in the translations file
    */
+  async updateResourceTranslations(subject, resourceId, frTranslations, enTranslations) {
+    try {
+      const translations = await this._loadTranslationsWithRegex()
+      this._ensureResourceStructure(translations, subject, resourceId)
+
+      Object.assign(translations.fr.resources.exercises[subject][resourceId], frTranslations)
+      Object.assign(translations.en.resources.exercises[subject][resourceId], enTranslations)
+
+      await this._saveTranslationsFile(translations)
+      return { success: true }
+    } catch (error) {
+      throw new Error(`Unable to update translations: ${error.message}`)
+    }
+  }
+
+  /**
+   * Automatically translates a resource from French to English
+   */
+  async translateResourceAutomatically(subject, resourceId, frTranslations, options = {}) {
+    try {
+      const {
+        service = 'libretranslate',
+        googleApiKey = null,
+        onProgress = null
+      } = options
+
+      const { translationService } = require('./translationService.js')
+
+      const fieldsToTranslate = ['title', 'description', 'fullDescription', 'notes']
+      const enTranslations = {}
+
+      let completed = 0
+      const total = fieldsToTranslate.length
+
+      for (const field of fieldsToTranslate) {
+        if (frTranslations[field] && frTranslations[field].trim()) {
+          if (onProgress) {
+            onProgress(`Translating ${field}...`, completed, total)
+          }
+
+          try {
+            enTranslations[field] = await translationService.translateText(frTranslations[field], {
+              fromLang: 'fr',
+              toLang: 'en',
+              service,
+              googleApiKey
+            })
+
+            // Delay to avoid overwhelming the API
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } catch (error) {
+            enTranslations[field] = `[Translation failed] ${frTranslations[field]}`
+          }
+        } else {
+          enTranslations[field] = frTranslations[field] || ''
+        }
+
+        completed++
+        if (onProgress) {
+          onProgress(`${field} translated`, completed, total)
+        }
+      }
+
+      await this.updateResourceTranslations(subject, resourceId, frTranslations, enTranslations)
+
+      return {
+        success: true,
+        frTranslations,
+        enTranslations
+      }
+    } catch (error) {
+      throw new Error(`Automatic translation failed: ${error.message}`)
+    }
+  }
+
+  /**
+   * Ensures the necessary structure exists for a resource
+   */
+  _ensureResourceStructure(translations, subject, resourceId) {
+    // French structure
+    if (!translations.fr.resources) translations.fr.resources = {}
+    if (!translations.fr.resources.exercises) translations.fr.resources.exercises = {}
+    if (!translations.fr.resources.exercises[subject]) translations.fr.resources.exercises[subject] = {}
+    if (!translations.fr.resources.exercises[subject][resourceId]) translations.fr.resources.exercises[subject][resourceId] = {}
+
+    // English structure
+    if (!translations.en.resources) translations.en.resources = {}
+    if (!translations.en.resources.exercises) translations.en.resources.exercises = {}
+    if (!translations.en.resources.exercises[subject]) translations.en.resources.exercises[subject] = {}
+    if (!translations.en.resources.exercises[subject][resourceId]) translations.en.resources.exercises[subject][resourceId] = {}
+  }
+
+  /**
+   * Saves the translations.js file with backup
+   */
+  async _saveTranslationsFile(translations) {
+    try {
+      // Create backup
+      const backupPath = `${this.translationsPath}.backup.${Date.now()}`
+      const currentContent = await fs.readFile(this.translationsPath, 'utf8')
+      await fs.writeFile(backupPath, currentContent, 'utf8')
+
+      // Generate and write new content
+      const newContent = this._generateTranslationsFileContent(translations)
+      await fs.writeFile(this.translationsPath, newContent, 'utf8')
+    } catch (error) {
+      throw new Error(`Unable to save translations file: ${error.message}`)
+    }
+  }
+
+  /**
+   * Generates the content for translations.js file
+   */
+  _generateTranslationsFileContent(translations) {
+    const header = `// src/i18n/translations.js
+
+export const translations = `
+
+    const footer = `
+`
+
+    // Serialize object with proper indentation
+    const jsonString = JSON.stringify(translations, null, 2)
+      .replace(/"([^"]+)":/g, '$1:') // Remove quotes from keys
+      .replace(/\\n/g, '\\n') // Preserve line breaks
+      .replace(/\\"/g, '\\"') // Preserve escaped quotes
+
+    return header + jsonString + footer
+  }
+
   async _verifyTranslationsFile() {
     try {
       await fs.access(this.translationsPath)
-      console.log('✅ Fichier translations.js trouvé')
     } catch (error) {
-      throw new Error(`Fichier translations.js introuvable: ${this.translationsPath}`)
+      throw new Error(`Translations file not found: ${this.translationsPath}`)
     }
   }
 
   /**
-   * 📖 Parse le fichier translations.js avec regex (compatible ES6 modules)
+   * Loads and parses the translations.js file using regex
+   * Uses eval() for dynamic parsing - be cautious with untrusted content
    */
   async _loadTranslationsWithRegex() {
     try {
-      // Lire le fichier
       const fileContent = await fs.readFile(this.translationsPath, 'utf8')
 
-      // 🎯 Méthode robuste : extraire l'objet avec regex
-
-      // 1. Supprimer les commentaires
       let cleanContent = fileContent
-        .replace(/\/\*[\s\S]*?\*\//g, '') // Commentaires /* */
-        .replace(/\/\/.*$/gm, '') // Commentaires //
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '')
 
-      // 2. Extraire la partie entre = et export/fin de fichier
       const exportMatch = cleanContent.match(/export\s+const\s+translations\s*=\s*(\{[\s\S]*?\});?\s*$/)
 
       if (!exportMatch) {
-        throw new Error('Format de fichier translations.js non reconnu')
+        throw new Error('Unrecognized translations.js file format')
       }
 
       const objectContent = exportMatch[1]
-
-      // 3. Évaluer l'objet JavaScript pur
       const translations = eval(`(${objectContent})`)
 
-      console.log('✅ Fichier translations.js parsé avec succès')
-      console.log('📊 Langues trouvées:', Object.keys(translations))
-
       return translations
-
     } catch (error) {
-      console.error('❌ Erreur parsing:', error.message)
-
-      // 🆘 Méthode de fallback : regex plus simple
       try {
         return await this._fallbackParsingMethod()
       } catch (fallbackError) {
-        throw new Error(`Impossible de parser translations.js: ${error.message}`)
+        throw new Error(`Unable to parse translations.js: ${error.message}`)
       }
     }
   }
 
   /**
-   * 🆘 Méthode de fallback pour le parsing
+   * Fallback method for parsing translations when regex method fails
    */
   async _fallbackParsingMethod() {
-    console.log('🔄 Tentative de parsing avec méthode de fallback...')
-
     const fileContent = await fs.readFile(this.translationsPath, 'utf8')
-
-    // Extraire tout ce qui est entre les premières { et dernières }
     const startIndex = fileContent.indexOf('{')
     const lastIndex = fileContent.lastIndexOf('}')
 
     if (startIndex === -1 || lastIndex === -1) {
-      throw new Error('Structure d\'objet JavaScript non trouvée')
+      throw new Error('JavaScript object structure not found')
     }
 
     const objectString = fileContent.substring(startIndex, lastIndex + 1)
-
-    // Essayer d'évaluer
     const translations = eval(`(${objectString})`)
 
-    console.log('✅ Parsing de fallback réussi')
     return translations
   }
 
-  /**
-   * 🎯 Extrait les traductions d'une ressource spécifique
-   */
   _extractResourceTranslations(translations, subject, resourceId) {
     const result = { fr: {}, en: {} }
 
     try {
-      // Extraire traductions françaises
       if (translations.fr?.resources?.exercises?.[subject]?.[resourceId]) {
         result.fr = { ...translations.fr.resources.exercises[subject][resourceId] }
-        console.log('✅ Traductions FR extraites:', Object.keys(result.fr))
-      } else {
-        console.warn(`⚠️ Traductions FR non trouvées pour ${subject}.${resourceId}`)
       }
 
-      // Extraire traductions anglaises
       if (translations.en?.resources?.exercises?.[subject]?.[resourceId]) {
         result.en = { ...translations.en.resources.exercises[subject][resourceId] }
-        console.log('✅ Traductions EN extraites:', Object.keys(result.en))
-      } else {
-        console.warn(`⚠️ Traductions EN non trouvées pour ${subject}.${resourceId}`)
       }
 
       return result
-
     } catch (error) {
-      console.error('❌ Erreur extraction:', error.message)
-      throw new Error(`Impossible d'extraire les traductions: ${error.message}`)
+      throw new Error(`Unable to extract translations: ${error.message}`)
     }
   }
 
-  /**
-   * 🧪 Test de configuration avec diagnostic complet
-   */
   async testConfiguration() {
-    console.log('🧪 Test de configuration DirectTranslationService...')
-
     try {
-      // Test 1: Vérifier les chemins
-      console.log('📁 Projet web:', this.webProjectPath)
-      console.log('📄 Fichier translations:', this.translationsPath)
-
-      // Test 2: Vérifier l'existence
       await this._verifyTranslationsFile()
-
-      // Test 3: Parser le fichier
       const translations = await this._loadTranslationsWithRegex()
 
-      // Test 4: Analyser la structure
       if (translations.fr?.resources?.exercises) {
         const subjects = Object.keys(translations.fr.resources.exercises)
-        console.log('✅ Matières disponibles:', subjects)
 
         subjects.forEach(subject => {
           const resources = Object.keys(translations.fr.resources.exercises[subject] || {})
-          console.log(`📚 Ressources en ${subject}:`, resources.length > 0 ? resources : 'Aucune')
         })
       }
 
-      // Test 5: Test réel d'extraction
-      console.log('\n🎯 Test d\'extraction sur une ressource existante...')
       const testSubject = 'maths'
-      const testResource = 'interro0LLG' // Ou la première ressource trouvée
+      const testResource = 'interro0LLG'
+      await this.getResourceTranslations(testSubject, testResource)
 
-      const extracted = await this.getResourceTranslations(testSubject, testResource)
-      console.log('✅ Test d\'extraction réussi')
-      console.log('📝 Titre FR:', extracted.fr.title || 'MANQUANT')
-      console.log('📝 Titre EN:', extracted.en.title || 'MANQUANT')
-
-      console.log('🎉 Configuration parfaite - Service opérationnel !')
       return true
-
     } catch (error) {
-      console.error('❌ Test de configuration échoué:', error.message)
       return false
     }
   }

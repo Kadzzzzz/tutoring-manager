@@ -1,5 +1,5 @@
 // src/renderer/components/ResourceForm.js
-// Composant Vue pour le formulaire de ressource
+// Composant Vue pour le formulaire de ressource avec traduction automatique
 
 window.ResourceForm = {
   props: {
@@ -201,6 +201,52 @@ window.ResourceForm = {
           </div>
         </div>
 
+        <!-- SECTION: TRADUCTION AUTOMATIQUE -->
+        <div class="form-section translation-section">
+          <h3 class="section-title" style="color: #0369a1;">
+            <i class="fas fa-globe"></i>
+            Traduction automatique
+          </h3>
+          
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="autoTranslateEnabled" class="form-checkbox">
+              <span class="checkbox-custom"></span>
+              Traduire automatiquement FR → EN
+            </label>
+            <span class="help-text">Utilise LibreTranslate ou MyMemory (services gratuits)</span>
+          </div>
+
+          <div v-if="autoTranslateEnabled" style="margin-top: 12px;">
+            <button 
+              type="button" 
+              @click="translateToEnglish" 
+              :disabled="translating || !formData.subject || !formData.id || !frTranslations.title || !frTranslations.description" 
+              class="btn btn-primary"
+              style="margin-bottom: 12px;"
+            >
+              <i v-if="translating" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-globe"></i>
+              {{ translating ? 'Traduction...' : 'Traduire maintenant' }}
+            </button>
+
+            <!-- Barre de progression -->
+            <div v-if="translationProgress.isVisible" class="translation-progress">
+              <div class="progress-bar">
+                <div 
+                  class="progress-fill" 
+                  :style="{ width: translationProgress.percentage + '%' }"
+                ></div>
+              </div>
+              <p class="progress-message">{{ translationProgress.message }}</p>
+            </div>
+
+            <div class="help-text" style="margin-top: 8px;">
+              <strong>⚠️ Important :</strong> Remplissez d'abord la matière, l'ID, et au minimum le titre et la description français.
+            </div>
+          </div>
+        </div>
+
         <!-- Section: Traductions -->
         <div class="form-section">
           <h3 class="section-title">
@@ -350,6 +396,15 @@ window.ResourceForm = {
     const errors = reactive({})
     const existingResources = ref([])
 
+    // État de la traduction automatique
+    const autoTranslateEnabled = ref(false)
+    const translating = ref(false)
+    const translationProgress = reactive({
+      message: '',
+      percentage: 0,
+      isVisible: false
+    })
+
     // Données du formulaire
     const formData = reactive({
       id: '',
@@ -401,21 +456,159 @@ window.ResourceForm = {
     // === MÉTHODES ===
 
     /**
+     * TRADUCTION AUTOMATIQUE
+     */
+    const translateToEnglish = async () => {
+      // Validation préalable
+      if (!frTranslations.title || !frTranslations.title.trim() ||
+          !frTranslations.description || !frTranslations.description.trim()) {
+        alert('⚠️ Remplissez au moins le titre et la description français avant de traduire')
+        return
+      }
+
+      if (!formData.subject || !formData.id) {
+        alert('⚠️ Veuillez d\'abord remplir la matière et l\'ID de la ressource')
+        return
+      }
+
+      translating.value = true
+      translationProgress.isVisible = true
+      translationProgress.message = 'Initialisation...'
+      translationProgress.percentage = 0
+
+      try {
+        console.log('🌍 Début de la traduction automatique...')
+
+        // 1. Test de connectivité des services
+        console.log('🧪 Test des services de traduction...')
+        translationProgress.message = 'Test des services de traduction...'
+        const serviceTest = await window.electronAPI.testTranslationServices()
+
+        if (!serviceTest.success) {
+          throw new Error('Services de traduction indisponibles')
+        }
+
+        console.log('✅ Services disponibles:', serviceTest.data)
+
+        // 2. Choisir le meilleur service disponible
+        let selectedService = 'libretranslate'
+        if (serviceTest.data.libretranslate && serviceTest.data.libretranslate.status !== 'ok' &&
+            serviceTest.data.mymemory && serviceTest.data.mymemory.status === 'ok') {
+          selectedService = 'mymemory'
+        }
+
+        console.log('🎯 Service sélectionné:', selectedService)
+        translationProgress.message = 'Service sélectionné: ' + selectedService
+        translationProgress.percentage = 10
+
+        // 3. Préparer les traductions françaises
+        const frData = {
+          title: frTranslations.title.trim(),
+          description: frTranslations.description.trim(),
+          fullDescription: frTranslations.fullDescription ? frTranslations.fullDescription.trim() : '',
+          notes: frTranslations.notes ? frTranslations.notes.trim() : ''
+        }
+
+        // 4. Écouter la progression
+        window.electronAPI.onTranslationProgress((progress) => {
+          translationProgress.message = progress.message
+          translationProgress.percentage = 10 + (progress.percentage * 0.8) // 10% déjà fait, 80% pour la traduction
+          console.log('📊 ' + progress.message + ' (' + progress.percentage + '%)')
+        })
+
+        // 5. Lancer la traduction automatique
+        console.log('🚀 Lancement de la traduction...')
+        const result = await window.electronAPI.translateResourceAuto({
+          subject: formData.subject,
+          resourceId: formData.id,
+          frTranslations: frData,
+          options: {
+            service: selectedService,
+            googleApiKey: null
+          }
+        })
+
+        // 6. Traiter le résultat
+        if (result.success) {
+          console.log('✅ Traduction réussie:', result.data)
+
+          translationProgress.message = 'Application des traductions...'
+          translationProgress.percentage = 95
+
+          // Appliquer les traductions anglaises dans le formulaire
+          const translatedData = result.data.enTranslations
+
+          Object.assign(enTranslations, {
+            title: translatedData.title || '',
+            description: translatedData.description || '',
+            fullDescription: translatedData.fullDescription || '',
+            notes: translatedData.notes || ''
+          })
+
+          // Force la réactivité
+          await Vue.nextTick()
+
+          translationProgress.message = 'Terminé !'
+          translationProgress.percentage = 100
+
+          // Notification de succès
+          setTimeout(() => {
+            alert('🎉 Traduction automatique terminée avec succès !\n\n' +
+                  'Les traductions anglaises ont été générées et sauvegardées.')
+          }, 500)
+
+          console.log('🎯 Traductions appliquées dans le formulaire')
+
+        } else {
+          throw new Error(result.error || 'Traduction échouée')
+        }
+
+      } catch (error) {
+        console.error('❌ Erreur traduction automatique:', error)
+
+        // Messages d'erreur plus spécifiques
+        let errorMessage = '❌ Erreur de traduction: '
+
+        if (error.message.includes('indisponibles')) {
+          errorMessage += 'Les services de traduction ne sont pas accessibles. Vérifiez votre connexion internet.'
+        } else if (error.message.includes('API')) {
+          errorMessage += 'Problème avec l\'API de traduction. Réessayez dans quelques minutes.'
+        } else {
+          errorMessage += error.message
+        }
+
+        alert(errorMessage)
+
+      } finally {
+        translating.value = false
+
+        // Masquer la progression après un délai
+        setTimeout(() => {
+          translationProgress.isVisible = false
+          translationProgress.message = ''
+          translationProgress.percentage = 0
+        }, 2000)
+
+        // Nettoyer les listeners
+        window.electronAPI.removeTranslationProgressListener()
+
+        console.log('🔄 Traduction terminée (cleanup effectué)')
+      }
+    }
+
+    /**
      * Valide et nettoie un ID de ressource
-     * @param {string} id - L'ID à valider
-     * @returns {string} - L'ID nettoyé
      */
     const validateId = (id) => {
       if (!id || typeof id !== 'string') {
         return ''
       }
 
-      // Nettoyer l'ID : uniquement lettres, chiffres et tirets
       return id
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '')
-        .replace(/^-+|-+$/g, '') // Supprimer les tirets en début/fin
-        .substring(0, 50) // Limite à 50 caractères
+        .replace(/^-+|-+$/g, '')
+        .substring(0, 50)
     }
 
     /**
@@ -428,46 +621,11 @@ window.ResourceForm = {
     }
 
     /**
-     * Génère automatiquement un ID basé sur le titre français
-     */
-    const generateId = () => {
-      const title = frTranslations.title || ''
-      if (!title) {
-        console.warn('⚠️ Impossible de générer un ID : titre français manquant')
-        return
-      }
-
-      let baseId = title
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Supprimer les accents
-        .replace(/[^a-z0-9]+/g, '') // Garder uniquement lettres et chiffres
-        .substring(0, 20) // Limiter à 20 caractères
-
-      if (!baseId) {
-        baseId = 'resource'
-      }
-
-      // Vérifier l'unicité
-      let uniqueId = baseId
-      let counter = 1
-
-      while (existingResources.value.some(r => r.id === uniqueId)) {
-        uniqueId = `${baseId}${counter}`
-        counter++
-      }
-
-      formData.id = validateId(uniqueId)
-      console.log('🆔 ID généré:', formData.id)
-    }
-
-    /**
      * Initialise le formulaire en mode édition ou création
      */
     const initializeForm = async () => {
       if (props.resource) {
         console.log('🔧 Mode édition - Initialisation du formulaire')
-        console.log('📋 Ressource reçue:', props.resource)
 
         // Mode édition - remplir avec les données de base
         Object.assign(formData, {
@@ -482,9 +640,7 @@ window.ResourceForm = {
           pdfSolution: props.resource.pdfSolution || ''
         })
 
-        console.log('✅ Données de base appliquées:', { ...formData })
-
-        // 🔧 NOUVELLE LOGIQUE: Charger les traductions via l'API
+        // Charger les traductions via l'API
         try {
           console.log('📖 Chargement des traductions depuis l\'API...')
 
@@ -498,92 +654,51 @@ window.ResourceForm = {
 
             // Appliquer les traductions françaises
             if (translationsResult.data.fr) {
-              console.log('🇫🇷 Application des traductions FR:', translationsResult.data.fr)
               Object.assign(frTranslations, {
                 title: translationsResult.data.fr.title || '',
                 description: translationsResult.data.fr.description || '',
                 fullDescription: translationsResult.data.fr.fullDescription || '',
                 notes: translationsResult.data.fr.notes || ''
               })
-              console.log('✅ Traductions FR appliquées:', { ...frTranslations })
             }
 
             // Appliquer les traductions anglaises
             if (translationsResult.data.en) {
-              console.log('🇬🇧 Application des traductions EN:', translationsResult.data.en)
               Object.assign(enTranslations, {
                 title: translationsResult.data.en.title || '',
                 description: translationsResult.data.en.description || '',
                 fullDescription: translationsResult.data.en.fullDescription || '',
                 notes: translationsResult.data.en.notes || ''
               })
-              console.log('✅ Traductions EN appliquées:', { ...enTranslations })
             }
 
-            // 🔧 Force la réactivité avec nextTick
             await Vue.nextTick()
             console.log('🎯 Formulaire prêt avec traductions')
 
           } else {
-            console.warn('⚠️ Aucune traduction trouvée ou erreur:', translationsResult.error)
-
+            console.warn('⚠️ Aucune traduction trouvée')
             // Initialiser avec des valeurs vides
-            Object.assign(frTranslations, {
-              title: '',
-              description: '',
-              fullDescription: '',
-              notes: ''
-            })
-
-            Object.assign(enTranslations, {
-              title: '',
-              description: '',
-              fullDescription: '',
-              notes: ''
-            })
+            Object.assign(frTranslations, { title: '', description: '', fullDescription: '', notes: '' })
+            Object.assign(enTranslations, { title: '', description: '', fullDescription: '', notes: '' })
           }
 
         } catch (error) {
           console.error('❌ Erreur lors du chargement des traductions:', error)
-
           // En cas d'erreur, initialiser avec des valeurs vides
-          Object.assign(frTranslations, {
-            title: '',
-            description: '',
-            fullDescription: '',
-            notes: ''
-          })
-
-          Object.assign(enTranslations, {
-            title: '',
-            description: '',
-            fullDescription: '',
-            notes: ''
-          })
+          Object.assign(frTranslations, { title: '', description: '', fullDescription: '', notes: '' })
+          Object.assign(enTranslations, { title: '', description: '', fullDescription: '', notes: '' })
         }
-
-        console.log('🎯 Initialisation terminée - Mode édition pour:', props.resource.id)
 
       } else {
         // Mode création - formulaire vide
         console.log('➕ Mode création - nouveau formulaire')
 
-        // Réinitialiser tous les champs
         Object.keys(formData).forEach(key => {
-          if (key === 'hasVideo') {
-            formData[key] = false
-          } else {
-            formData[key] = ''
-          }
+          formData[key] = key === 'hasVideo' ? false : ''
         })
 
-        Object.keys(frTranslations).forEach(key => {
-          frTranslations[key] = ''
-        })
-
-        Object.keys(enTranslations).forEach(key => {
-          enTranslations[key] = ''
-        })
+        Object.keys(frTranslations).forEach(key => { frTranslations[key] = '' })
+        Object.keys(enTranslations).forEach(key => { enTranslations[key] = '' })
       }
     }
 
@@ -595,7 +710,7 @@ window.ResourceForm = {
 
         if (result.success && !result.canceled) {
           pdfFiles[type] = result.filePath
-          console.log(`PDF ${type} sélectionné:`, result.filePath)
+          console.log('PDF ' + type + ' sélectionné:', result.filePath)
         }
       } catch (error) {
         console.error('Erreur sélection fichier:', error)
@@ -612,14 +727,12 @@ window.ResourceForm = {
     const validateForm = () => {
       Object.keys(errors).forEach(key => delete errors[key])
 
-      // Validation de base
       if (!formData.id.trim()) errors.id = 'L\'ID est requis'
       if (!formData.subject) errors.subject = 'La matière est requise'
       if (!formData.levelKey) errors.levelKey = 'Le niveau est requis'
       if (!formData.typeKey) errors.typeKey = 'Le type est requis'
       if (!formData.duration.trim()) errors.duration = 'La durée est requise'
 
-      // Validation des traductions
       if (!frTranslations.title.trim()) errors.frTitle = 'Le titre français est requis'
       if (!frTranslations.description.trim()) errors.frDescription = 'La description française est requise'
       if (!enTranslations.title.trim()) errors.enTitle = 'Le titre anglais est requis'
@@ -638,7 +751,6 @@ window.ResourceForm = {
       saving.value = true
 
       try {
-        // Préparer les données
         const resourceData = {
           id: formData.id.trim(),
           subject: formData.subject,
@@ -649,11 +761,10 @@ window.ResourceForm = {
           videoUrl: formData.hasVideo ? formData.videoUrl.trim() : ''
         }
 
-        // Nettoyer les traductions
         const cleanTranslations = (translations) => {
           const cleaned = {}
           Object.keys(translations).forEach(key => {
-            const value = translations[key]?.trim()
+            const value = translations[key] ? translations[key].trim() : ''
             if (value) cleaned[key] = value
           })
           return cleaned
@@ -662,7 +773,6 @@ window.ResourceForm = {
         const cleanedFrTranslations = cleanTranslations(frTranslations)
         const cleanedEnTranslations = cleanTranslations(enTranslations)
 
-        // Préparer les fichiers PDF
         const pdfFilesData = {}
         if (pdfFiles.statement) pdfFilesData.statement = pdfFiles.statement
         if (pdfFiles.solution) pdfFilesData.solution = pdfFiles.solution
@@ -674,7 +784,6 @@ window.ResourceForm = {
           pdfFiles: pdfFilesData
         })
 
-        // Émettre l'événement de sauvegarde
         emit('save', {
           resource: resourceData,
           frTranslations: cleanedFrTranslations,
@@ -701,16 +810,13 @@ window.ResourceForm = {
       console.log('🔧 ResourceForm monté - Initialisation...')
 
       try {
-        // Charger les ressources existantes
         const result = await window.electronAPI.loadResources()
         if (result.success) {
           existingResources.value = result.data.resources || []
           console.log('📚 Ressources existantes chargées:', existingResources.value.length)
         }
 
-        // Initialiser le formulaire
         await initializeForm()
-
         console.log('✅ ResourceForm initialisé')
       } catch (error) {
         console.error('❌ Erreur lors de l\'initialisation:', error)
@@ -726,6 +832,9 @@ window.ResourceForm = {
       enTranslations,
       pdfFiles,
       existingResources,
+      autoTranslateEnabled,
+      translating,
+      translationProgress,
 
       // Computed
       isFormValid,
@@ -733,12 +842,12 @@ window.ResourceForm = {
       // Méthodes
       validateId,
       validateIdField,
-      generateId,
       selectPdfFile,
       getFileName,
-      handleSubmit
+      handleSubmit,
+      translateToEnglish
     }
   }
 }
 
-console.log('✅ ResourceForm component défini');
+console.log('✅ ResourceForm component défini avec traduction automatique');

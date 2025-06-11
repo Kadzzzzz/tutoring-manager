@@ -39,6 +39,21 @@ const electronAPI = {
   // === GESTION DES TRADUCTIONS ===
   getResourceTranslations: (params) => ipcRenderer.invoke('get-resource-translations', params),
 
+  // 🌍 === NOUVELLES APIs DE TRADUCTION AUTOMATIQUE ===
+  translateResourceAuto: (data) => ipcRenderer.invoke('translate-resource-auto', data),
+  updateResourceTranslations: (data) => ipcRenderer.invoke('update-resource-translations', data),
+  testTranslationServices: () => ipcRenderer.invoke('test-translation-services'),
+
+  // Écouter les événements de progression de traduction
+  onTranslationProgress: (callback) => {
+    ipcRenderer.on('translation-progress', (event, data) => callback(data))
+  },
+
+  // Nettoyer les listeners de traduction
+  removeTranslationProgressListener: () => {
+    ipcRenderer.removeAllListeners('translation-progress')
+  },
+
   // === GESTION DES FICHIERS ===
   selectPdfFile: (title) => ipcRenderer.invoke('select-pdf-file', title),
   listPdfFiles: () => ipcRenderer.invoke('list-pdf-files'),
@@ -123,4 +138,4 @@ if (process.argv.includes('--dev')) {
   })
 }
 
-console.log('🔧 Preload script loaded - Bridge IPC ready!')
+console.log('🔧 Preload script loaded - Bridge IPC ready with translation APIs!')

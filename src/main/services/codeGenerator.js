@@ -1,4 +1,5 @@
 // src/main/services/codeGenerator.js
+// 🔧 GÉNÉRATEUR DE CODE COMPLET AVEC TRADUCTION AUTOMATIQUE
 const { parse } = require('@babel/parser')
 const traverse = require('@babel/traverse').default || require('@babel/traverse')
 const generate = require('@babel/generator').default || require('@babel/generator')
@@ -6,9 +7,9 @@ const t = require('@babel/types')
 const prettier = require('prettier')
 
 /**
- * Service de génération de code - VERSION FINALE CORRIGÉE
+ * Service de génération de code complet
  * Utilise l'AST de Babel pour modifier et générer le nouveau code
- * Cette version corrige automatiquement les structures corrompues
+ * + Traduction automatique intégrée
  */
 
 /**
@@ -100,7 +101,7 @@ function findResourceIndexInArray(arrayExpression, resourceId) {
 }
 
 /**
- * 🎯 NOUVELLES FONCTIONS AST POUR LES TRADUCTIONS - VERSION CORRIGÉE
+ * 🎯 FONCTIONS AST POUR LES TRADUCTIONS
  */
 
 /**
@@ -322,7 +323,7 @@ function removeResourceFromAST(ast, lang, subject, resourceId) {
 }
 
 /**
- * 🎯 FONCTIONS PRINCIPALES MISES À JOUR
+ * 🎯 FONCTIONS PRINCIPALES POUR APP.VUE
  */
 
 /**
@@ -504,7 +505,7 @@ async function removeResourceFromAppVue(appVueContent, resourceId) {
 }
 
 /**
- * 🚀 NOUVELLES FONCTIONS AVEC AST POUR LES TRADUCTIONS - VERSION FINALE
+ * 🚀 FONCTIONS AVEC AST POUR LES TRADUCTIONS
  */
 
 /**
@@ -648,11 +649,89 @@ export const ${formattedCode.replace('const ', '').replace(/;\s*$/, '')}`
   }
 }
 
+/**
+ * 🌐 FONCTIONS DE TRADUCTION AUTOMATIQUE
+ */
+
+/**
+ * Service de traduction simple pour intégration
+ */
+async function translateText(text, fromLang = 'fr', toLang = 'en') {
+  try {
+    // Utilise LibreTranslate par défaut
+    const response = await fetch('https://libretranslate.de/translate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: text,
+        source: fromLang,
+        target: toLang,
+        format: 'text'
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Translation API error: ${response.status}`)
+    }
+
+    const result = await response.json()
+    return result.translatedText || text
+  } catch (error) {
+    console.error('Translation error:', error)
+    return text // Retourner le texte original en cas d'erreur
+  }
+}
+
+/**
+ * Ajoute une ressource avec traduction automatique
+ */
+async function addResourceWithAutoTranslation(translationsContent, subject, resourceId, frTranslations, options = {}) {
+  try {
+    console.log(`🌐 [AUTO] Traduction automatique activée pour ${subject}/${resourceId}`)
+
+    let enTranslations = {}
+
+    if (options.enableAutoTranslation) {
+      // Traduire chaque champ
+      const fieldsToTranslate = ['title', 'description', 'fullDescription', 'notes']
+
+      for (const field of fieldsToTranslate) {
+        if (frTranslations[field] && frTranslations[field].trim()) {
+          console.log(`🔄 Traduction de ${field}...`)
+          enTranslations[field] = await translateText(frTranslations[field])
+
+          // Petit délai pour éviter de surcharger l'API
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } else {
+          enTranslations[field] = frTranslations[field] || ''
+        }
+      }
+
+      console.log('✅ [AUTO] Traduction automatique terminée')
+    } else {
+      // Utiliser les traductions manuelles fournies
+      enTranslations = options.enTranslations || frTranslations
+    }
+
+    // Ajouter les traductions avec la fonction AST existante
+    return await addTranslationsForResource(translationsContent, subject, resourceId, frTranslations, enTranslations)
+
+  } catch (error) {
+    console.error('❌ [AUTO] Erreur traduction automatique:', error.message)
+    // En cas d'erreur, utiliser les traductions françaises pour l'anglais
+    return await addTranslationsForResource(translationsContent, subject, resourceId, frTranslations, frTranslations)
+  }
+}
+
 module.exports = {
   addResourceToAppVue,
   updateResourceInAppVue,
   removeResourceFromAppVue,
   addTranslationsForResource,
   updateTranslationsForResource,
-  removeTranslationsForResource
+  removeTranslationsForResource,
+  addResourceWithAutoTranslation,
+  translateText
 }

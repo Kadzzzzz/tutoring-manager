@@ -1045,4 +1045,272 @@ input, select, textarea {
   .modal-actions {
     flex-direction: column;
   }
+
+  /* === SECTION TRADUCTION AUTOMATIQUE === */
+  .translation-section {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%) !important;
+    border: 1px solid #0ea5e9 !important;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .translation-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #0ea5e9, #3b82f6, #6366f1);
+  }
+
+  .translation-section .section-title {
+    color: #0369a1 !important;
+    font-weight: 600;
+  }
+
+  .translation-section .section-title i {
+    color: #0ea5e9;
+    margin-right: 8px;
+  }
+
+  /* === BARRE DE PROGRESSION === */
+  .translation-progress {
+    margin-top: 15px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+    border: 1px solid rgba(14, 165, 233, 0.2);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #1d4ed8, #1e40af);
+    transition: width 0.4s ease-out;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    animation: progressShine 2s infinite;
+  }
+
+  @keyframes progressShine {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .progress-message {
+    margin: 10px 0 0 0;
+    font-size: 0.875rem;
+    color: #475569;
+    font-weight: 500;
+    text-align: center;
+    font-style: italic;
+  }
+
+  /* === BOUTON DE TRADUCTION === */
+  .translation-section .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #1e40af);
+    border: none;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .translation-section .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .translation-section .btn-primary:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .translation-section .btn-primary .fa-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* === CHECKBOX PERSONNALISÉ === */
+  .translation-section .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+    padding: 8px 0;
+  }
+
+  .translation-section .checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #0ea5e9;
+    border-radius: 3px;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .translation-section input[type="checkbox"]:checked + .checkbox-custom {
+    background: #0ea5e9;
+    border-color: #0ea5e9;
+  }
+
+  .translation-section input[type="checkbox"]:checked + .checkbox-custom::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+  }
+
+  .translation-section input[type="checkbox"] {
+    display: none;
+  }
+
+  /* === TEXTE D'AIDE === */
+  .translation-section .help-text {
+    color: #6b7280 !important;
+    font-size: 0.8rem;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .translation-section .help-text strong {
+    color: #dc2626;
+    font-weight: 600;
+  }
+
+  /* === ANIMATIONS === */
+  .translation-section {
+    animation: slideInFromTop 0.4s ease-out;
+  }
+
+  @keyframes slideInFromTop {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .translation-progress {
+    animation: fadeInUp 0.3s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 768px) {
+    .translation-section {
+      margin: 15px 0;
+    }
+
+    .translation-progress {
+      padding: 10px;
+    }
+
+    .progress-message {
+      font-size: 0.8rem;
+    }
+
+    .translation-section .btn-primary {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  /* === ÉTATS DE LOADING === */
+  .translation-section.translating {
+    pointer-events: none;
+    position: relative;
+  }
+
+  .translation-section.translating::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(1px);
+  }
+
+  /* === ICÔNES === */
+  .translation-section .fa-globe {
+    color: #0ea5e9;
+    margin-right: 6px;
+  }
+
+  .translation-section .fa-spinner {
+    color: white;
+    margin-right: 6px;
+  }
+
+  /* === FOCUS ET ACCESSIBILITÉ === */
+  .translation-section .btn-primary:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+  }
+
+  .translation-section .checkbox-label:focus-within .checkbox-custom {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
 }

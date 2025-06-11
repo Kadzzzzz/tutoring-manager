@@ -1,11 +1,15 @@
 // src/main/main.js
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
+const DirectTranslationService = require('./services/directTranslationService')
 
 // Import des services
 const fileService = require('./services/fileService.js')
 const resourceParser = require('./services/resourceParser.js')
 const codeGenerator = require('./services/codeGenerator.js')
+
+// Initialiser les services
+const directTranslationService = new DirectTranslationService()
 
 let mainWindow
 
@@ -393,6 +397,122 @@ app.whenReady().then(() => {
       createMainWindow()
     }
   })
+})
+
+// ===============================================
+// 🌍 NOUVELLES APIs IPC POUR LA TRADUCTION
+// ===============================================
+
+/**
+ * Traduit automatiquement une ressource FR → EN
+ */
+ipcMain.handle('translate-resource-auto', async (event, data) => {
+  try {
+    console.log('🌍 IPC: translate-resource-auto appelé avec:', data)
+
+    const { subject, resourceId, frTranslations, options = {} } = data
+
+    // Validation des paramètres
+    if (!subject || !resourceId || !frTranslations) {
+      throw new Error('Paramètres manquants: subject, resourceId, et frTranslations requis')
+    }
+
+    // Fonction de progression pour communiquer avec le renderer
+    const onProgress = (message, completed, total) => {
+      event.sender.send('translation-progress', {
+        message,
+        completed,
+        total,
+        percentage: Math.round((completed / total) * 100)
+      })
+    }
+
+    // Lancer la traduction automatique
+    const result = await directTranslationService.translateResourceAutomatically(
+      subject,
+      resourceId,
+      frTranslations,
+      { ...options, onProgress }
+    )
+
+    console.log('✅ IPC: Traduction automatique terminée')
+    return {
+      success: true,
+      data: result
+    }
+
+  } catch (error) {
+    console.error('❌ IPC: Erreur traduction automatique:', error.message)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+})
+
+/**
+ * Met à jour manuellement les traductions d'une ressource
+ */
+/**
+ * Met à jour manuellement les traductions d'une ressource
+ */
+ipcMain.handle('update-resource-translations', async (event, data) => {
+  try {
+    console.log('📝 IPC: update-resource-translations appelé avec:', data)
+
+    const { subject, resourceId, frTranslations, enTranslations } = data
+
+    if (!subject || !resourceId || !frTranslations || !enTranslations) {
+      throw new Error('Paramètres manquants')
+    }
+
+    await directTranslationService.updateResourceTranslations(
+      subject,
+      resourceId,
+      frTranslations,
+      enTranslations
+    )
+
+    console.log('✅ IPC: Traductions mises à jour')
+    return {
+      success: true,
+      message: 'Traductions mises à jour avec succès'
+    }
+
+  } catch (error) {
+    console.error('❌ IPC: Erreur mise à jour traductions:', error.message)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+})
+
+/**
+ * Test de connectivité des services de traduction
+ */
+ipcMain.handle('test-translation-services', async () => {
+  try {
+    console.log('🧪 IPC: test-translation-services appelé')
+
+    // 🔧 CORRECTION: Utiliser require au lieu d'import dynamique
+    const { translationService } = require('./services/translationService.js')
+
+    const results = await translationService.testServices()
+
+    console.log('✅ IPC: Test des services terminé')
+    return {
+      success: true,
+      data: results
+    }
+
+  } catch (error) {
+    console.error('❌ IPC: Erreur test services:', error.message)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
 })
 
 // Quitter quand toutes les fenêtres sont fermées
